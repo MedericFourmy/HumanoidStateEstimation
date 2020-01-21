@@ -16,6 +16,7 @@
 % \newcommand{\Th}[2]{\prescript{#1}{}{\widehat T}_{#2}}  % ?
 \newcommand{\Tm}[2]{\prescript{#1}{}{\widetilde{\bfT}}_{#2}}
 \newcommand{\Rot}[2]{\prescript{#1}{}{\bfR}_{#2}}
+\newcommand{\Rotm}[2]{\prescript{#1}{}{\widetilde{\bfR}}_{#2}}
 \newcommand{\noise}{\bfn}
 
 \newcommand{\posiv}[1]{\underline{\bfp}_{#1}}
@@ -195,8 +196,9 @@ m\ddot{\COM}&=
 m\bfg + \Rot{}{} \sum_l \Rot{B}{L}(q) (\forcem{}{l} - \noise_f) 
 \\
 \dot{\AM}_c&= 
-\sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\bfp +
-\Rot{}{}\posi{B}{BL}(q) - \COM)) \times \Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f)  
+\sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\Rot{}{} \posi{B}{CL}(q)) \times (\Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
+\\
+&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bfb_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
 \end{split}
 \end{equation}
 
@@ -208,41 +210,37 @@ It can be reformulated as the state-space model equation on the COM related vari
 \\
 \frac{d\dot{\bfc}}{dt}&= \bfg + \frac{1}{m} \Rot{}{} \sum_l \Rot{B}{L}(q) (\forcem{}{l} - \noise_f) 
 \\
-\frac{d\AM_c}{dt}&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\bfp +
-\Rot{}{}\posi{B}{BL}(q) - \COM)) \times \Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f)
+\frac{d\AM_c}{dt}&= \Rot{}{} \sum_l \Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bfb_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
 \end{split}
 \label{eq:COMContinuous}
 \end{equation}
 
-We can also derive the angular momentum equations in the inertial frame attached to one of the extremities in contact (the one that we trust the most maybe). We will only write the case where only one of the extremities is in contact: \(l*\).
-
-\begin{equation}
-\begin{split}
-    \frac{d \prescript{L*}{}{\AM}_c}{dt} &=
-    (\torquem{}{l} - \noise_{\tau}) + \posi{L*}{CL*}(q) \times (\forcem{}{l*} - \noise_f)
-    \\
-    &= (\torquem{}{l} - \noise_{\tau}) + (\Rot{L*}{B}(q)\Rot{}{}^T(\bfp - \COM) + \posi{L*}{BL*}(q)) \times (\forcem{}{l*} - \noise_f)
-\end{split}
-\end{equation}
- 
-but again this leads to untangled equations that cannot be pre-integrated.
-
-Yet another option is to consider the quantity $\posi{b}{BC}$  as a measurement disturbed by a Gaussian noise and a time varying bias considered constant during pre-integration period. 
+We will consider the quantity $\posi{b}{BC}$  as a measurement disturbed by a Gaussian noise and a time varying bias considered constant during pre-integration period. 
  
 \begin{equation}
 \posim{B}{BC} = \posi{B}{BC}(q) + \bfb_{p} + \noise_p 
 \end{equation}
+
+All other terms computed through direct kinematics are in first hand considered as exact values but are in fact corrupted by (supposedly) gaussian noise due to encoder noise, flexibilities, model errors...
+
+\begin{equation}
+\begin{split}
+\posim{A}{AB} = \posi{A}{AB}(q) + \noise_p ~~~ \noise_p \sim \Gaussian{0}{Q_p}, ~ Q_p \in \mathrm{R}^{3\times 3} 
+\\
+\Rotm{A}{B} = \Rot{A}{B}(q) Exp(\phi) ~~~ \phi \sim \Gaussian{0}{Q_{\phi}}, ~ Q_{\phi} \in \mathrm{R}^{3\times 3}
+\end{split}
+\end{equation}
  
 Considering again the angular momentum theorem expressed in W, this leads to:
- 
  
 \begin{equation}
 \begin{split}
     \frac{d\AM_c}{dt} &= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\Rot{}{} \posi{B}{CL}(q)) \times (\Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
 \\
-&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bfb_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
+&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q) - (\posim{B}{BC} -  \bfb_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
 \end{split}
 \end{equation}
+
 
 We now need to discretize this continuous system to define factors between successive times. We integrate \ref{eq:COMContinuous} between 2 consecutive measurements ($t_k$ and $t_{k+1}$ $\Delta t = t_{k} - t_{k-1}$)  We use a simple first order approximation (forward Euler) which consists in assuming a zero order hold. We may also add a second order term for the com position since we have measurements on its acceleration.
 
@@ -254,8 +252,7 @@ We now need to discretize this continuous system to define factors between succe
 \dot{\COM}^{k+1}&= \dot{\COM}^{k} + (\bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k})) \Delta t 
 \\
 \AM_c^{k+1} &= \AM_c^{k} +  ( 
-\sum_l \Rot{}{}^{k}\Rot{B}{L}(q^{k})(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\bfp^{k-1} +
-\Rot{}{}^{k}\posi{B}{BL}(q^{k}) - \COM^{k})) \times \Rot{}{}^{k}\Rot{B}{L}(q^{k})(\forcem{}{l}^{k} - \noise_f^{k}) 
+\Rot{}{}^{k}\sum_l \Rot{B}{L}(q^{k})(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bfb_{p}^k + \noise_p^k) \times \Rot{B}{L}(q^{k})(\forcem{}{l}^{k} - \noise_f^{k}) 
 ) \Delta t
 \end{split}
 \label{eq:COMDiscrete}
@@ -273,7 +270,7 @@ Based on equations \ref{eq:COMDiscrete}, we will define the 3 functions \(g_1\),
 \\
 \dot{\COM}^{k+1} - \dot{\COM}^{k} &= g_2(\Rot{}{}^{k}, \noise_f^{k}) 
 \\
-\AM_c^{k+1} - \AM_c^{k} &= g_3(\Rot{}{}^{k}, \posi{}{B}^{k}, \COM^{k}, \noise_f^{k}, \noise_\tau^{k})
+\AM_c^{k+1} - \AM_c^{k} &= g_3(\Rot{}{}^{k}, \bfb_{p}^k, \noise_p^k, \noise_f^{k}, \noise_\tau^{k})
 \end{split}
 \end{equation}
 
@@ -291,29 +288,34 @@ Solved for COM position and velocity but AM is less obvious (different possibili
 \dot{\COM}^{j} - \dot{\COM}^{i} &= \sum_{k=i}^{j-1} \Big[ 
 \bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Big] \Delta t 
 \\
-\AM_c^{j} - \AM_c^{i} &=  \sum_{k=i}^{j-1} \Big[ 
-\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\bfp^{k} + \Rot{}{}^{k}\posi{B}{BL}(q^{k}) - \COM^{k})) \Big]  \Delta t
+\AM_c^{j} - \AM_c^{i} &=  \sum_{k=i}^{j-1} \Rot{}{}^{k} \Big[ 
+\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bfb_{p}^k + \noise_p^k) \Big]  \Delta t
 \end{split}
 \label{eq:COMij}
 \end{equation}
 
 
-It is then possible to define a "delta" quantity depending only on the measurements relating the com position and velocities at \(t_i\) and \(t_j\):
+It is then possible to define a "delta" quantity depending only on the measurements relating the com position, com velocity and Angular Momentum at \(t_i\) and \(t_j\):
 
 \begin{equation}
 \begin{split}
     \Delta \COM_{ik} &\triangleq \Rot{}{}^{i,T} (\COM^j - \COM^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2}\grav \Delta t_{ij}^2) 
     \\
-    &= \sum_{k=i}^{j} \Big[ \Delta \dot{\COM}_{ik} \Delta t + \frac{1}{2m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t^2 \Big]
+    &= \sum_{k=i}^{j-1} \Big[ \Delta \dot{\COM}_{ik} \Delta t + \frac{1}{2m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t^2 \Big]
 \\
     \Delta \dot{\COM}_{ik} &\triangleq \Rot{}{}^{i,T} (\dot{\COM}^{k} - \dot{\COM}^{i} - \bfg \Delta t_{ik})
 \\
-    &= \sum_{k=i}^{j} \frac{1}{m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t 
+    &= \sum_{k=i}^{j-1} \frac{1}{m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t 
+\\
+    \Delta \AM_{ik} &\triangleq \Rot{}{}^{i,T} (\AM_c^{j} - \AM_c^{i})
+\\
+     &=  \sum_{k=i}^{j-1} \Delta R_{ik} \Big[ 
+    \sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bfb_{p}^k + \noise_p^k) \Big]  \Delta t
 \end{split}
 \label{eq:COMPreint}
 \end{equation}
 
-We can then define a recursive scheme to retrieve measurement values (putting \(\noise_f^{k} = 0\)) and a covariance propagation scheme akin to the IMU pre-integration framework. 
+We can then define a recursive scheme to retrieve measurement values and a covariance propagation scheme akin to the IMU pre-integration framework. 
 Difficulties that might come up during implementation:
 
 \begin{itemize}
@@ -355,21 +357,6 @@ Differential kinematics expressed in $W$ with measurement models included and re
 % \AM_c &= \bfI(q) \angvel{B} + \AM_q (q,\dot{q})   
 \end{split}
 \end{equation}
-
-TODO: for the AM eq, in which frame is the angular vel?
-
-
-
-%%%%%%%
-% Not considered?
-%%%%%%%
-% Discretized equation (forward Euler):
-% \begin{equation}
-% \begin{split}
-% \COM^k &= \COM^{k-1} + (\angvelm{}{}^k - \bfb_{\angvel{}{}}^k - \noise_{\angvel{}{}}^k) \times p_{BC}(q^k) + \vel{}{}^k + v_{BC}(q^k,\dot{q}^k) 
-% \end{split}
-% \end{equation}
-
 
 \subsection{COM kinematics}
 Very simply, the COM position (in the world frame) can be recovered from kinematic measurements and the current robot body frame pose estimation as:
@@ -572,6 +559,59 @@ Multiplying by $\Rot{}{}^{i,T}$ and reordering the terms, we can finally define 
 \begin{equation}
     \Delta p_{ij} \triangleq \Rot{}{}^{i,T}(\posi{}{}^j - \posi{}{}^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2} \grav \Delta t_{ij}^2) = \sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \end{equation}
+
+
+\subsection{COM estimation random notes}
+
+Instead of using the biased kinematic measurement $\posim{B}{BC}$, we can 
+
+\begin{equation}
+\begin{split}
+\frac{d\AM_c}{dt}&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\bfp +
+\Rot{}{}\posi{B}{BL}(q) - \COM)) \times \Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f)
+\end{split}
+\label{eq:AMContinuousRandomNotes}
+\end{equation}
+
+First order discretization of \ref{eq:AMContinuousRandomNotes} gives:
+
+\begin{equation}
+\begin{split}
+\AM_c^{k+1} &= \AM_c^{k} +  ( 
+\sum_l \Rot{}{}^{k}\Rot{B}{L}(q^{k})(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\bfp^{k-1} +
+\Rot{}{}^{k}\posi{B}{BL}(q^{k}) - \COM^{k})) \times \Rot{}{}^{k}\Rot{B}{L}(q^{k})(\forcem{}{l}^{k} - \noise_f^{k}) 
+) \Delta t
+\end{split}
+\end{equation}
+
+
+
+Adding measurements between 2 arbitrary timestamps \(t_i\) and \(t_j\) with \(\Delta t_{ij} \triangleq t_j - t_i\), we get the equations:
+
+\begin{equation}
+\begin{split}
+\AM_c^{j} - \AM_c^{i} &=  \sum_{k=i}^{j-1} \Big[ 
+\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\bfp^{k} + \Rot{}{}^{k}\posi{B}{BL}(q^{k}) - \COM^{k})) \Big]  \Delta t
+\end{split}
+\end{equation}
+
+
+for which preintegration equations are not obvious (in fact, they likely do not exist).
+
+
+
+We can also derive the angular momentum equations in the inertial frame attached to one of the extremities in contact (the one that we trust the most maybe). We will only write the case where only one of the extremities is in contact: \(l*\).
+
+\begin{equation}
+\begin{split}
+    \frac{d \prescript{L*}{}{\AM}_c}{dt} &=
+    (\torquem{}{l} - \noise_{\tau}) + \posi{L*}{CL*}(q) \times (\forcem{}{l*} - \noise_f)
+    \\
+    &= (\torquem{}{l} - \noise_{\tau}) + (\Rot{L*}{B}(q)\Rot{}{}^T(\bfp - \COM) + \posi{L*}{BL*}(q)) \times (\forcem{}{l*} - \noise_f)
+\end{split}
+\end{equation}
+ 
+but again this leads to untangled equations that cannot be pre-integrated.
 
 
 \bibliography{biblio}
