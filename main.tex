@@ -352,9 +352,9 @@ Differential kinematics expressed in $W$ with measurement models included and re
 \begin{split}
 \dot{\COM} &= \vel{}{} + (\Rot{}{}(\angvelm{B}{B} - \bfb_{\omega} - \noise_{\omega})) \times (\Rot{}{}\posim{B}{BC}(q)) + \Rot{}{}\velm{B}{BC}(q,\dot{q}) 
 \\
-&= \vel{}{} + \Rot{}{}((\angvelm{B}{B} - \bfb_{\omega} - \noise_{\omega}) \times \posim{B}{BC}(q) + \velm{B}{BC}(q,\dot{q}))
+&= \vel{}{} + \Rot{}{}((\angvelm{B}{B} - \bfb_{\omega} - \noise_{\omega}) \times \posi{B}{BC}(q) + \vel{B}{BC}(q,\dot{q}))
 \\
-% \AM_c &= \bfI(q) \angvel{B} + \AM_q (q,\dot{q})   
+\AM_c &= \Rot{}{}(\bfI(q) (\angvelm{B}{B} - \bfb_{\omega} - \noise_{\omega}) + \AM_q (q,\dot{q}))
 \end{split}
 \end{equation}
 
@@ -401,6 +401,7 @@ which directly defines a tertiary factor between the pose (R,p) of the robot and
     % \includegraphics[width=0.7\linewidth]{IMU-Apriltag-Kinematics-Com.png}
     \includegraphics[width=1\linewidth]{HumanoidStateFactorGraph.png}
     % \caption{Factor graph representation of the simultaneous estimation of the robot state and COM state. Gray circles represent variables with from top to bottom Li: landmarks, p: robot position, q: robot orientation, v: robot velocity, b: IMU biases, c: COM position in foot frame, cd: COM velocity in foot frame, Lc: system angular momentum in foot frame. Constraints are represented as squares with A: Apriltag, O: odometry using forward kinematics, I: IMU, AR: absolute orientation, BD: bias drift, RP: relative position of the COM wrt. the robot reference frame, FM: force and moment measurements integration.}
+    % \caption{Latest version at https://docs.google.com/drawings/d/1XQ80bcXe--4V49n_bDHHNxId_9YTiQ_YTVO0kwxaypA}
     \label{fig:my_label}
 \end{figure}
 
