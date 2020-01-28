@@ -18,6 +18,7 @@
 \newcommand{\Rot}[2]{\prescript{#1}{}{\bfR}_{#2}}
 \newcommand{\Rotm}[2]{\prescript{#1}{}{\widetilde{\bfR}}_{#2}}
 \newcommand{\noise}{\bfn}
+\newcommand{\bias}{\bfb}
 
 \newcommand{\posiv}[1]{\underline{\bfp}_{#1}}
 \newcommand{\posi}[2]{\prescript{#1}{}{\bfp}_{#2}}
@@ -47,6 +48,8 @@
 \newcommand{\gravv}{\underline{\bfg}}
 
 \newcommand{\Gaussian}[2]{\mathcal{N}({#1},{#2})}
+\newcommand{\Ident}{\bfI}
+
 
 %%%%%%%%%%%%%%%%%%%
 
@@ -198,7 +201,7 @@ m\bfg + \Rot{}{} \sum_l \Rot{B}{L}(q) (\forcem{}{l} - \noise_f)
 \dot{\AM}_c&= 
 \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\Rot{}{} \posi{B}{CL}(q)) \times (\Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
 \\
-&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bfb_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
+&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bias_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
 \end{split}
 \end{equation}
 
@@ -210,16 +213,26 @@ It can be reformulated as the state-space model equation on the COM related vari
 \\
 \frac{d\dot{\bfc}}{dt}&= \bfg + \frac{1}{m} \Rot{}{} \sum_l \Rot{B}{L}(q) (\forcem{}{l} - \noise_f) 
 \\
-\frac{d\AM_c}{dt}&= \Rot{}{} \sum_l \Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bfb_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
+\frac{d\AM_c}{dt}&= \Rot{}{} \sum_l \Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bias_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
 \end{split}
 \label{eq:COMContinuous}
 \end{equation}
 
-We will consider the quantity $\posi{b}{BC}$  as a measurement disturbed by a Gaussian noise and a time varying bias considered constant during pre-integration period. 
- 
+Great care should be given defining a measurement model for \(\posi{B}{BC}(q)\). This data is potentially corrupted by 3 factors:
+
+\begin{itemize}
+    \item encoder noise
+    \item errors in the inertial/kinematic model of the robot
+    \item structural flexibilities
+\end{itemize}
+
+While the first term could be regarded as a Gaussian perturbation, the two others are clearly bias terms that depend strongly on robot configuration and the dynamics/phases of the movement.  
+We will consider the quantity $\posi{b}{BC}$  as a measurement disturbed by a Gaussian noise and a time varying bias considered constant during pre-integration period.
+
 \begin{equation}
-\posim{B}{BC} = \posi{B}{BC}(q) + \bfb_{p} + \noise_p 
+\posim{B}{BC} = \posi{B}{BC}(q) + \bias_{p} + \noise_p 
 \end{equation}
+
 
 All other terms computed through direct kinematics are in first hand considered as exact values but are in fact corrupted by (supposedly) gaussian noise due to encoder noise, flexibilities, model errors...
 
@@ -227,22 +240,16 @@ All other terms computed through direct kinematics are in first hand considered 
 \begin{split}
 \posim{A}{AB} = \posi{A}{AB}(q) + \noise_p ~~~ \noise_p \sim \Gaussian{0}{Q_p}, ~ Q_p \in \mathrm{R}^{3\times 3} 
 \\
+\velm{A}{AB} = \vel{A}{AB}(q) + \noise_v ~~~ \noise_v \sim \Gaussian{0}{Q_v}, ~ Q_v \in \mathrm{R}^{3\times 3} 
+\\
 \Rotm{A}{B} = \Rot{A}{B}(q) Exp(\phi) ~~~ \phi \sim \Gaussian{0}{Q_{\phi}}, ~ Q_{\phi} \in \mathrm{R}^{3\times 3}
 \end{split}
 \end{equation}
  
-Considering again the angular momentum theorem expressed in W, this leads to:
- 
-\begin{equation}
-\begin{split}
-    \frac{d\AM_c}{dt} &= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\Rot{}{} \posi{B}{CL}(q)) \times (\Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
-\\
-&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q) - (\posim{B}{BC} -  \bfb_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
-\end{split}
-\end{equation}
+An \textbf{important} thing to take into account is the fact that some of the kinematic measurement noise can be correlated. For instance the relative position shoulder-hand is strongly correlated with the shoulder-elbow one. Some others are less obvious (hand velocity/hand position?). As for the relative poses measurements, one way to deal with these hard to model correlations is to decompose the measurements so that the noise random variables can be reasonably considered independent. One idea is to consider (if such exists) a root frame by which the considered kinematic chain is passing. For instance   
 
 
-We now need to discretize this continuous system to define factors between successive times. We integrate \ref{eq:COMContinuous} between 2 consecutive measurements ($t_k$ and $t_{k+1}$ $\Delta t = t_{k} - t_{k-1}$)  We use a simple first order approximation (forward Euler) which consists in assuming a zero order hold. We may also add a second order term for the com position since we have measurements on its acceleration.
+We now need to discretize this continuous system to define factors between successive times. We integrate \ref{eq:COMContinuous} between 2 consecutive measurements ($t_k$ and $t_{k+1}$ $\Delta t = t_{k} - t_{k-1}$)  We use a simple first order approximation (forward Euler) which consists in assuming a zero order hold on measurements. We may also add a second order term for the com position since we have measurements on its acceleration.
 
 \begin{equation}
 \begin{split}
@@ -252,7 +259,7 @@ We now need to discretize this continuous system to define factors between succe
 \dot{\COM}^{k+1}&= \dot{\COM}^{k} + (\bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k})) \Delta t 
 \\
 \AM_c^{k+1} &= \AM_c^{k} +  ( 
-\Rot{}{}^{k}\sum_l \Rot{B}{L}(q^{k})(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bfb_{p}^k + \noise_p^k) \times \Rot{B}{L}(q^{k})(\forcem{}{l}^{k} - \noise_f^{k}) 
+\Rot{}{}^{k}\sum_l \Rot{B}{L}(q^{k})(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^k + \noise_p^k) \times \Rot{B}{L}(q^{k})(\forcem{}{l}^{k} - \noise_f^{k}) 
 ) \Delta t
 \end{split}
 \label{eq:COMDiscrete}
@@ -270,7 +277,7 @@ Based on equations \ref{eq:COMDiscrete}, we will define the 3 functions \(g_1\),
 \\
 \dot{\COM}^{k+1} - \dot{\COM}^{k} &= g_2(\Rot{}{}^{k}, \noise_f^{k}) 
 \\
-\AM_c^{k+1} - \AM_c^{k} &= g_3(\Rot{}{}^{k}, \bfb_{p}^k, \noise_p^k, \noise_f^{k}, \noise_\tau^{k})
+\AM_c^{k+1} - \AM_c^{k} &= g_3(\Rot{}{}^{k}, \bias_{p}^k, \noise_p^k, \noise_f^{k}, \noise_\tau^{k})
 \end{split}
 \end{equation}
 
@@ -289,7 +296,7 @@ Solved for COM position and velocity but AM is less obvious (different possibili
 \bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Big] \Delta t 
 \\
 \AM_c^{j} - \AM_c^{i} &=  \sum_{k=i}^{j-1} \Rot{}{}^{k} \Big[ 
-\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bfb_{p}^k + \noise_p^k) \Big]  \Delta t
+\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^k + \noise_p^k) \Big]  \Delta t
 \end{split}
 \label{eq:COMij}
 \end{equation}
@@ -299,18 +306,18 @@ It is then possible to define a "delta" quantity depending only on the measureme
 
 \begin{equation}
 \begin{split}
-    \Delta \COM_{ik} &\triangleq \Rot{}{}^{i,T} (\COM^j - \COM^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2}\grav \Delta t_{ij}^2) 
+    \Delta \COM_{ij} &\triangleq \Rot{}{}^{i,T} (\COM^j - \COM^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2}\grav \Delta t_{ij}^2) 
     \\
     &= \sum_{k=i}^{j-1} \Big[ \Delta \dot{\COM}_{ik} \Delta t + \frac{1}{2m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t^2 \Big]
 \\
-    \Delta \dot{\COM}_{ik} &\triangleq \Rot{}{}^{i,T} (\dot{\COM}^{k} - \dot{\COM}^{i} - \bfg \Delta t_{ik})
+    \Delta \dot{\COM}_{ij} &\triangleq \Rot{}{}^{i,T} (\dot{\COM}^{k} - \dot{\COM}^{i} - \bfg \Delta t_{ik})
 \\
     &= \sum_{k=i}^{j-1} \frac{1}{m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t 
 \\
-    \Delta \AM_{ik} &\triangleq \Rot{}{}^{i,T} (\AM_c^{j} - \AM_c^{i})
+    \Delta \AM_{ij} &\triangleq \Rot{}{}^{i,T} (\AM_c^{j} - \AM_c^{i})
 \\
      &=  \sum_{k=i}^{j-1} \Delta R_{ik} \Big[ 
-    \sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bfb_{p}^k + \noise_p^k) \Big]  \Delta t
+    \sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^k + \noise_p^k)) \Big]  \Delta t
 \end{split}
 \label{eq:COMPreint}
 \end{equation}
@@ -325,81 +332,120 @@ Difficulties that might come up during implementation:
 
 
 
-\subsection{COM differential kinematics}
+\subsection{Inertial kinematics}
+It is possible to derive equations relating instantaneous relations between inertial quantities and the body quantities through kinematics considerations.
+First, the velocity composition law on the COM between the world and body frame writes in vectorial form:
+\begin{equation}
+\dot{\COMv} = \angvelv{B} \times \posiv{BC}(q) + \velv{B} + \velv{BC}(q,\dot{q}) 
+\end{equation}
+
+The angular momentum of a multibody system can be decomposed in two terms as follows.
+
+\begin{equation}
+\AMv_c = \bfI(q) \angvelv{B} + \AMv_q (q,\dot{q})   
+\end{equation}
+
+where
 
 \begin{itemize}
-    \item \( \angvel{}{WB} \): angular velocity vector describing the rotation rate of \textbf{frame B with respect to the observer inertial frame}
-    \item \( \bfI(q) \): inertia matrix of the robot expressed at the COM
+    \item \( \angvel{}{B} \): angular velocity vector describing the rotation rate of frame B with respect to the observer inertial frame
+    \item \( \bfI(q) \): inertia matrix of the robot expressed at the COM available at XXX frame
     \item \( \AM_q (q,\dot{q}) \): Angular momentum of the limbs ("gesticulation")
 \end{itemize}
 
-\begin{equation}
-\begin{split}
-\dot{\COMv} &= \angvelv{B} \times \posiv{BC}(q) + \velv{B} + \velv{BC}(q,\dot{q}) 
-\\
-\AMv_c &= \bfI(q) \angvelv{B} + \AMv_q (q,\dot{q})   
-\end{split}
-\end{equation}
-
-Measurement model:
-\begin{align}
-    \angvelm{}{} = \angvel{B}{WB} + \bfb_{\omega} + \noise_{\omega}
-\end{align}
-
-Differential kinematics expressed in $W$ with measurement models included and rearranged terms:
-
-\begin{equation}
-\begin{split}
-\dot{\COM} &= \vel{}{} + (\Rot{}{}(\angvelm{B}{B} - \bfb_{\omega} - \noise_{\omega})) \times (\Rot{}{}\posim{B}{BC}(q)) + \Rot{}{}\velm{B}{BC}(q,\dot{q}) 
-\\
-&= \vel{}{} + \Rot{}{}((\angvelm{B}{B} - \bfb_{\omega} - \noise_{\omega}) \times \posi{B}{BC}(q) + \vel{B}{BC}(q,\dot{q}))
-\\
-\AM_c &= \Rot{}{}(\bfI(q) (\angvelm{B}{B} - \bfb_{\omega} - \noise_{\omega}) + \AM_q (q,\dot{q}))
-\end{split}
-\end{equation}
-
-\subsection{COM kinematics}
-Very simply, the COM position (in the world frame) can be recovered from kinematic measurements and the current robot body frame pose estimation as:
+Also very simply, the COM position (in the world frame) can be transformed from its position in body frame:
 
 \begin{equation}
     \COM = \Rot{}{} \posi{B}{BC}(q) + \posi{}{}
 \end{equation}
 
-However, great care should be given defining a measurement model for \(\posi{B}{BC}(q)\). This data is potentially corrupted by 3 factors:
-\begin{itemize}
-    \item encoder noise
-    \item errors in the inertial/kinematic model of the robot
-    \item structural flexibilities
-\end{itemize}
 
-While the first term could be regarded as a Gaussian perturbation, the two others are clearly bias terms that depend strongly on robot configuration and the dynamics/phases of the movement.  
 
-As a first approach, let's consider a simple additive Gaussian noise model:
+Given the previously explained measurement models of $\angvel{B}{WB}$ and $\posi{B}{BC}$, we can project these equations in the world frame. We also add a relation between the COM position expressed in the world frame and its body frame relative measurement:
 
 \begin{equation}
-    \posim{B}{BC}(q) = \posi{B}{BC}(q) + \noise_p ~~~~~~ \noise_p \sim \Gaussian{O}{Q_p}
+\begin{split}
+\COM &= \Rot{}{} (\posim{B}{BC} -  \bias_{p} - \noise_p) + \posi{}{}
+\\
+\dot{\COM} &= \vel{}{} + \Rot{}{}((\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) \times (\posim{B}{BC} -  \bias_{p} - \noise_p) + (\velm{B}{BC} - \noise_v))
+\\
+\AM_c &= \Rot{}{}(\bfI(q) (\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) + \AM_q (q,\dot{q}))
+\end{split}
 \end{equation}
 
-Hence we get:
+Given these equations, we will now define error random variables as a function of the states and their related covariance matrix. The direct kinematics is easy to put in the form $y = h(x) + n$ and therefore the error function is simply  $e(x) = y - h(x) ~~~ e \sim \Gaussian{0}{Q_n}$. 
 
 \begin{equation}
-    \posim{B}{BC}(q) = \Rot{}{}^T(\COM - \posi{}{}) + \noise_p
+\bfe_{ikin}(\COM, \dot{\COM}, \AM_c, \posi{}{}, \Rot{}{}, \vel{}{}, \bias_{\omega}, \bias_p) = 
+\begin{pmatrix}
+\bfe_{\COM}(\COM, \posi{}{}, \Rot{}{})
+\\
+\bfe_{\dot{\COM}}(\dot{\COM}, \vel{}{}, \Rot{}{}, \bias_{\omega}, \bias_p)\\
+\bfe_{\AM_c}(\AM_c, \Rotm{}{}, \bias_{\omega})
+\end{pmatrix}
+=
+\begin{pmatrix}
+\posim{B}{BC} - (\Rot{}{}^T(\COM - \posi{}{}) + \bias_{p}) 
+\\
+(\angvelm{B}{B} - \bias_{\omega}) \times (\posim{B}{BC} -  \bias_{p}) + \velm{B}{BC} - \Rot{}{}^T(\dot{\COM} - \vel{}{})
+\\
+\bfI(q) (\angvelm{B}{B} - \bias_{\omega}) - \Rot{}{}\AM_c
+\end{pmatrix}
 \end{equation}
 
-which directly defines a tertiary factor between the pose (R,p) of the robot and the COM position. This is a 3D factor constraining 3 3D vectors which means it is greatly undetermined: the factor graph has to include factor making, by themselves, the robot pose observable.
+The second requires linearization with regard to the biases $\noise_{\omega}$ and $\noise_{p}$ in order to get its covariance matrix. Keeping the noise terms:
 
+\begin{equation}
+    \bfe_{\dot{\COM}} = cst(\noise_{\omega}, \noise_{p}, \noise_{v}) - [\angvelm{B}{B} - \bias_{\omega}]_{\times}\noise_p + [\posim{B}{BC} -  \bias_{p}]_{\times}\noise_{\omega} - \noise_v + \noise_{\omega}\times\noise_p
+\end{equation}
 
+Neglecting the last nonlinear term in the $\dot{\COM}$ equation, we thus have a linear relation between measurement noises and error functions. 
+Noting $\bfe_n$ the noisy error (random variable), we can derive the linear transformation from $\bfe_n$ with respect to the noise vector $\noise_{ikin} = (\noise_p^T, \noise_v^T, \noise_{\omega}^T)^T$.
 
-\subsection{TODO}
+\begin{equation}
+\bfJ^{\bfe}_{\noise} = 
+\begin{pmatrix}
+\Ident & 0 & 0 
+\\
+- [\angvelm{B}{B} - \bias_{\omega}]_{\times} & -\Ident & [\posim{B}{BC} -  \bias_{p}]_{\times}
+\\
+0 & \Ident & 0
+\end{pmatrix}
+\end{equation}
+
+Then the covariance matrix associated to the error vector is $Q_e = \bfJ^{\bfe_{ikin}}_{\noise_{ikin}} Q_{\noise_{ikin}} \bfJ^{\bfe_{ikin} T}_{\noise_{ikin}}$ and the residual passed to the solver is $r_{ikin} = Q_{\bfe_{ikin}}^{-1/2} \bfe_{ikin}$.
+
+Defining $\bar{\omega} = $ and $\bar{\posi{}{}} = $, the covariance structure is:
+
+\begin{equation}
+Q_{ikin} = 
+\begin{pmatrix}
+Q_p  &  Q_p[\bar{\omega}]_{\times} & 0
+\\
+-[\bar{\omega}]_{\times}Q_p & Q_{pv\omega}& -Q_v
+\\
+0 & -Q_v & Q_v
+\end{pmatrix}
+\end{equation}
+
+where $Q_{pv\omega} = -[\bar{\omega}]_{\times}Q_p[\bar{\omega}]_{\times} + Q_v - [\bar{p}]_{\times}Q_{\omega}[\bar{p}]_{\times} $ 
+
+and $\bar{\angvel{}{}} = \angvelm{}{} - \bias_{\angvel{}{}}$,  $\bar{p} = \posim{B}{BC} - \bias_p \bias_{\angvel{}{}}$
+
+One thing to note is that the jacobian depends on the current bias estimates. Either the bias at the factor creation should be used hence the jacobian is constant and does not have to be recomputed or we recompute the covariance matrix each time a new bias estimate is available.
+
+\subsection{TODO/TOASK/IDEAS}
 \begin{itemize}
-    \item Add external force/moment to the estimated state? 
+    \item Add Delta R in COM factor as is done in Wisth 2019 for velocity preint?
+    % \item Add external force/moment to the estimated state? 
+    % \item use Thomas' estimator as a source of velocity measurements?
 \end{itemize}
 
 
 \begin{figure}[ht]
     \centering
-    % \includegraphics[width=0.7\linewidth]{IMU-Apriltag-Kinematics-Com.png}
-    \includegraphics[width=1\linewidth]{HumanoidStateFactorGraph.png}
+    % \includegraphics[width=0.7\linewidth]{img/IMU-Apriltag-Kinematics-Com.png}
+    \includegraphics[width=1\linewidth]{img/HumanoidStateFactorGraph.png}
     % \caption{Factor graph representation of the simultaneous estimation of the robot state and COM state. Gray circles represent variables with from top to bottom Li: landmarks, p: robot position, q: robot orientation, v: robot velocity, b: IMU biases, c: COM position in foot frame, cd: COM velocity in foot frame, Lc: system angular momentum in foot frame. Constraints are represented as squares with A: Apriltag, O: odometry using forward kinematics, I: IMU, AR: absolute orientation, BD: bias drift, RP: relative position of the COM wrt. the robot reference frame, FM: force and moment measurements integration.}
     % \caption{Latest version at https://docs.google.com/drawings/d/1XQ80bcXe--4V49n_bDHHNxId_9YTiQ_YTVO0kwxaypA}
     \label{fig:my_label}
@@ -421,13 +467,13 @@ which directly defines a tertiary factor between the pose (R,p) of the robot and
 \begin{figure}[ht]
 \begin{minipage}[c]{.46\linewidth}
     \centering
-    \includegraphics[width=0.6\linewidth]{robot_sketch.png}
+    \includegraphics[width=0.6\linewidth]{img/robot_sketch.png}
     \label{fig:sketch}
     \caption{Frames diagram}
 \end{minipage} \hfill
 \begin{minipage}[c]{.46\linewidth}
     \centering
-    \includegraphics[width=\linewidth]{cam_extrinsics_factor_graph.png}
+    \includegraphics[width=\linewidth]{img/cam_extrinsics_factor_graph.png}
     \label{fig:factorgraph}
     \caption{Extrinsics calibration factor graph}
 \end{minipage}
@@ -447,9 +493,9 @@ which directly defines a tertiary factor between the pose (R,p) of the robot and
 State to estimate:
 
 \begin{equation*}
-\bfx = [\posi{W}{WB}, \vel{W}{WB}, \Rot{W}{B}, \bfb_{\angvel{}{}}, \bfb_{\bfa}]
+\bfx = [\posi{W}{WB}, \vel{W}{WB}, \Rot{W}{B}, \bias_{\angvel{}{}}, \bias_{\bfa}]
 \triangleq 
-[\bfp, \bfv, \Rot{}{}, \bfb_{\angvel{}{}}, \bfb_{\bfa}] 
+[\bfp, \bfv, \Rot{}{}, \bias_{\angvel{}{}}, \bias_{\bfa}] 
 \end{equation*}
 
 Continuous state space equations:
@@ -462,9 +508,9 @@ Measurement model:
 
 \begin{equation*}
 \begin{split}
-\angvelm{}{} &= \angvel{B}{WB} + \bfb_{\angvel{}{}} + \noise_{\angvel{}{}} 
+\angvelm{}{} &= \angvel{B}{WB} + \bias_{\angvel{}{}} + \noise_{\angvel{}{}} 
 \\
-\accm{}{}    &= \acc{B}{WB} + \bfb_{\acc{}{}} + \noise_{\acc{}{}} 
+\accm{}{}    &= \acc{B}{WB} + \bias_{\acc{}{}} + \noise_{\acc{}{}} 
 \end{split}
 \end{equation*}
 
@@ -473,12 +519,12 @@ Taylor type, zero hold on measurement integration during $dt = t_k - t_{k-1}$:
 
 \begin{equation*}
 \begin{split}
-\Rot{}{}^{k+1}  &= \Rot{}{}^{k}Exp((\angvelm{}{}^k - \bfb_{\angvel{}{}^k} - \noise_{\angvel{}{}^k})dt)
+\Rot{}{}^{k+1}  &= \Rot{}{}^{k}Exp((\angvelm{}{}^k - \bias_{\angvel{}{}^k} - \noise_{\angvel{}{}^k})dt)
 \\
-\vel{}{}^{k+1}  &= \vel{}{}^{k} + \grav dt + \Rot{}{}^{k}(\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt
+\vel{}{}^{k+1}  &= \vel{}{}^{k} + \grav dt + \Rot{}{}^{k}(\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt
 \\
 \posi{}{}^{k+1} &= \posi{}{}^{k} + \vel{}{}^{k}dt + \frac{1}{2}\grav dt^2 
-+ \frac{1}{2}\Rot{}{}^{k}(\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2
++ \frac{1}{2}\Rot{}{}^{k}(\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2
 \end{split}
 \end{equation*}
 
@@ -487,12 +533,12 @@ Summing from $k=i$ to $k=j-1$:
 
 \begin{equation}
 \begin{split}
-\Rot{}{}^{j}  &= \Rot{}{}^{i} \prod_{k=i}^{j-1} Exp((\angvelm{}{}^k - \bfb_{\angvel{}{}^k} - \noise_{\angvel{}{}^k})dt)
+\Rot{}{}^{j}  &= \Rot{}{}^{i} \prod_{k=i}^{j-1} Exp((\angvelm{}{}^k - \bias_{\angvel{}{}^k} - \noise_{\angvel{}{}^k})dt)
 \\
-\vel{}{}^{j}  &= \vel{}{}^{i} + \sum_{k=i}^{j-1} \Big[\grav dt + \Rot{}{}^{k}(\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt \Big]
+\vel{}{}^{j}  &= \vel{}{}^{i} + \sum_{k=i}^{j-1} \Big[\grav dt + \Rot{}{}^{k}(\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt \Big]
 \\
 \posi{}{}^{j} &= \posi{}{}^{i} + \sum_{k=i}^{j-1} \Big[\vel{}{}^{k}dt + \frac{1}{2}\grav dt^2 
-+ \frac{1}{2}\Rot{}{}^{k}(\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
++ \frac{1}{2}\Rot{}{}^{k}(\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \end{split}
 \label{eq:IMUIntij}
 \end{equation}
@@ -502,14 +548,14 @@ Summing from $k=i$ to $k=j-1$:
 
 The rotation one is easy to get, multiplying by $\Rot{}{}^{i,T}$:
 \begin{equation}
-    \Delta R_{ij} \triangleq \Rot{}{}^{i,T} \Rot{}{}^{j} = \prod_{k=i}^{j-1} Exp((\angvelm{}{}^k - \bfb_{\angvel{}{}^k} - \noise_{\angvel{}{}^k})dt)
+    \Delta R_{ij} \triangleq \Rot{}{}^{i,T} \Rot{}{}^{j} = \prod_{k=i}^{j-1} Exp((\angvelm{}{}^k - \bias_{\angvel{}{}^k} - \noise_{\angvel{}{}^k})dt)
     \label{eq:IMUDeltaR}
 \end{equation}
 
-The velocity is as well quite easy, by defining $\Delta t_ij \triangleq \sum_{k=i}^{j-1} dt = (j-i)dt = (j - i)dt$:
+The velocity is as well quite easy, by defining $\Delta t_{ij} \triangleq \sum_{k=i}^{j-1} dt = (j-i)dt$:
 \begin{equation}
     \Delta v_{ij} \triangleq \Rot{}{}^{i,T} (\vel{}{j} - \vel{}{i} - g \Delta t_{ij}) 
-    = \prod_{k=i}^{j-1} \Delta R_{ik} Exp((\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt)
+    = \prod_{k=i}^{j-1} \Delta R_{ik} Exp((\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt)
     \label{eq:IMUDeltav}
 \end{equation}
 
@@ -519,15 +565,15 @@ The position delta requires more calculations. First, inject equation \ref{eq:IM
 \begin{split}
 \posi{}{}^{j} - \posi{}{}^{i} &= \sum_{k=i}^{j-1} \Big[
 (\vel{}{}^i + \grav \Delta t_{ik} + \Rot{}{}^i \Delta v_{ik})dt 
-+ \frac{1}{2}\grav dt^2 + \frac{1}{2}\Rot{}{}^{k}(\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
++ \frac{1}{2}\grav dt^2 + \frac{1}{2}\Rot{}{}^{k}(\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \\
 &= \vel{}{}^i \Delta t_{ij} + 
 \grav\sum_{k=i}^{j-1} \Delta t_{ik} dt + \frac{1}{2}\grav \sum_{k=i}^{j-1} dt^2 +
-\Rot{}{}^i\sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
+\Rot{}{}^i\sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \\
 &= \vel{}{}^i \Delta t_{ij} + 
 \grav \sum_{k=i}^{j-1}dt (\Delta t_{ik} + \frac{1}{2}dt^2) +
-\Rot{}{}^i\sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
+\Rot{}{}^i\sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \end{split}
 \end{equation}
 
@@ -558,7 +604,7 @@ we can deduce that:
 Multiplying by $\Rot{}{}^{i,T}$ and reordering the terms, we can finally define a position delta quantity:
 
 \begin{equation}
-    \Delta p_{ij} \triangleq \Rot{}{}^{i,T}(\posi{}{}^j - \posi{}{}^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2} \grav \Delta t_{ij}^2) = \sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bfb_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
+    \Delta p_{ij} \triangleq \Rot{}{}^{i,T}(\posi{}{}^j - \posi{}{}^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2} \grav \Delta t_{ij}^2) = \sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \end{equation}
 
 
