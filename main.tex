@@ -2,8 +2,10 @@
 
 %% Language and font encodings
 \usepackage[english]{babel}
-\usepackage[utf8x]{inputenc}
+\usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{textcomp}
+\usepackage{biblatex}
 
 \usepackage{amsmath,mathtools,amssymb}
 
@@ -41,19 +43,28 @@
 
 \newcommand{\AM}{\mathcal{L}}
 \newcommand{\AMv}{\underline{\mathcal{L}}}
+\newcommand{\AMm}{\widetilde{\mathcal{L}}}
 \newcommand{\COM}{\bfc}
 \newcommand{\COMv}{\underline{\bfc}}
+\newcommand{\COMm}{\widetilde{\bfc}}
+\newcommand{\COMd}{\dot{\bfc}}
+\newcommand{\COMdv}{\underline{\dot{\bfc}}}
+\newcommand{\COMdm}{\widetilde{\dot{\bfc}}}
 
 \newcommand{\grav}{\bfg}
 \newcommand{\gravv}{\underline{\bfg}}
 
 \newcommand{\Gaussian}[2]{\mathcal{N}({#1},{#2})}
 \newcommand{\Ident}{\bfI}
+\newcommand{\Reals}{\mathbb{R}}
 
 
 %%%%%%%%%%%%%%%%%%%
 
 \usepackage{customCommands} % Joan Sola's macros
+
+\addbibresource{biblio.bib}
+
 
 
 \topmargin -.5in
@@ -68,6 +79,43 @@
 \title{Humanoid robot state estimation}
 \maketitle
 
+\section{Primer on factor graph based estimation}
+
+In graph-based optimization, the problem is well represented as a bipartite graph, where one type of node refers to the variables, and the other type called \emph{factors} represent the geometrical constraints between variables, produced by the measurements.
+
+The state $\bfx$ is modeled as a multi-variate Gaussian distribution.
+In the case of landmark-based visual-inertial SLAM (see \figRef{fig:graph}), $\bfx$ includes robot poses and velocities $\bfx_i=(\bfp_i,\bfv_i,\bfR_i)$ and sensor biases $\bfb_i$, both at selected keyframes $i$ along the trajectory, and landmark poses $\bfl_n\in\SE(3)$.
+Bias are considered constant between keyframes and are taken at the $i$-th keyframe.
+
+In line with the recent works on the subject, we write the MAP optimization as the least-squares minimization (\figRef{fig:graph}),
+
+\begin{equation}
+    \bfx^* = \argmin_\bfx 
+    \sum_i \norm{\bfr^I_i(\bfx)}_{\bf \Sigma^I_i}^2
+    +
+    \sum_j \norm{\bfr^V_j(\bfx)}_{\bf \Sigma^V_j}^2
+    % +
+    % \sum_c \norm{\bfr_c(\bfx)}_{\Sigma_c}^2
+    \label{eq:leastsquare}
+\end{equation}
+
+
+% with $\{\bfr^I,\bfSigma^I\}$ and $\{\bfr^V,\bfSigma^V\}$ indicating the residuals and covariances of respectively the inertial (IMU) and visual factors.
+These residuals are computed differently depending on the nature of the measurements and the state blocks they relate to. 
+
+
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[scale=0.9]{img/graph}
+    \caption{A typical fraction of the factor graph, involving state blocks corresponding to keyframes $\bfx_i=(\bfp_i,\bfv_i,\bfR_i)$, biases $\bfb_i$ and landmark poses $\bfl_n$. 
+    IMU factors (blue) relate consecutive keyframes and the IMU biases.
+    The lower branch controls bias drift along time.
+    Visual factors (red) relate landmarks with poses $(\bfp_i,\bfR_i)$.}
+    \label{fig:graph}
+\end{figure}
+
+
 \section{Camera extrinsics calibration using Apriltag and kinematics}
 \subsection{Motivation}
 A camera is placed at an unknown location in a humanoid robot head. We want to estimate the camera pose with respect to the end of the kinematic chain of the robot: the neck joint frame.
@@ -79,11 +127,120 @@ The problem is formulated as a factor graph in which keyframes states are poses 
 Then to types of factors constrain the problem.
 
 \subsubsection*{Apriltag factor}
-It is a 6D binary factor that depends on the ith keyframe pose, jth landmark pose and camera extrinsics:
+Apriltags are squares landmarks which corner pixel coordinates can be recovered using the Apriltag library. Then given the square width $w$ and the camera model summarized in the intrinsic matrix $\bfK$ (camera images being undistored), we can recover the relative transformation between the camera frame C and the landmark frame L.
+\textit{Conventions}: X-Y-Z = Right-Down-Front for the camera. The landmark frame is chosen so that it has same orientation than the camera frame when the camera is in front of the tag, looking through its center axis.
 
-% $$
-% r(\T{F}{K_i}, \T{F}{L_j}, \T{K}{C}) = Log_{SE(3)}(\T{C}{L_j}^{-1}  \T{K}{C}^{-1}\T{F}{K_i}^{-1}\T{F}{L_j}) ~ \in ~ \mathrm{}{}{R}^6
-% $$
+We have the relation 
+\begin{equation}
+    \T{W}{L} = \T{W}{B}\T{B}{C}\T{C}{L}
+\end{equation}
+
+The state variables of this factor are the landmark and body poses as well as the camera extrinsics $\T{B}{C}$. The measurement we can recover is $\Tm{C}{L}$. Being an element of the Lie group $SE(3)$, the noise on the measurement has to be defined on the local tangent space as explained in \cite{barfoot2017state} so that the sensor model is:
+
+\begin{equation}
+    \Tm{C}{L} = \T{C}{L}Exp(\psi) ~~~~ \psi \sim \Gaussian{0}{Q_T}, ~Q_T \in \Reals^{6\times6}
+\end{equation}
+
+Then the 6D error function is defined as:
+
+\begin{equation}
+    e_{l}(\T{W}{L}, \T{W}{B}, \T{B}{C}) = Log(\T{W}{L} \T{W}{B}^{-1} \T{B}{C}^{-1} \Tm{C}{L}^{-1}) + \psi
+\end{equation}
+
+which is a nonlinear function of state variables and measurement with an additive gaussian noise -> we have our factor.
+
+However, we have not determined yet what the measurement covariance $Q_T$ is. Is should somehow be defined according to the pixel noise and the relative pose measurement: the further the landmark is, the greater the uncertainty for instance. A simple yet sensible model for the pixel noise is to assume isotropic and identical gaussian noise on the four pixels recovered. If we stack the four pixels $\bfx_i = [u_i,~v_i]^T \in \Reals^{2}$ in $\bfx = [\bfx_1 ~\bfx_2~ \bfx_3~ \bfx_4]^T$ and define $Q_{\bfx} = n^2 I_8, ~~n \in \Reals$.
+A natural way to proceed would be to use the nonlinear covariance propagation scheme using first order approximation.
+
+\begin{equation}
+    \begin{split}
+        f: \Reals^8 &\rightarrow SE(3) \\
+                           \bfx &\rightarrow \T{C}{L} = f_w(\bfx)
+    \end{split}
+\end{equation}
+
+where the subscript $w$ recalls that each reconstruction depends on the width of the considered tag. 
+However, the function f is hard to differentiate since it is an algorithmic process (PnP, ePnP, IPPE...). The function being bijective, we will rather consider its inverse g defined as :
+
+\begin{equation}
+    \begin{split}
+        g: SE(3) &\rightarrow \Reals^8 \\
+                           \T{C}{L} &\rightarrow \bfx = g_w(\T{C}{L})
+    \end{split}
+\end{equation}
+
+
+Corners coordinates in the landmark frames can be defined as follows:
+
+\begin{equation}
+    c =
+    \begin{pmatrix}
+    c_1 \\ c_2 \\ c_3 \\ c_4
+    \end{pmatrix}
+    ~~
+    c_1 =  \begin{pmatrix} -1 \\ -1 \\ 0 \end{pmatrix}
+    ~ 
+    c_2 =  \begin{pmatrix} 1 \\ -1 \\ 0 \end{pmatrix}
+    ~
+    c_3 =  \begin{pmatrix} 1 \\ 1 \\ 0 \end{pmatrix}
+    ~
+    c_4 =  \begin{pmatrix} -1 \\ 1 \\ 0 \end{pmatrix}
+\end{equation}
+
+where these vectors have been rescaled by a factor $\frac{w}{2}$. This one will be reintroduced later.
+Then $\bfx_i = eucl(h_i) = eucl(K\T{C}{L} c_i)$
+where $h_i \in \Reals^3$ are the homogenous coordinates associated to the corner projected through the camera lens and $eucl$ represents the "euclideanization" of these coordinates which permits recovering corresponding pixel coordinates. 
+
+\begin{equation}
+    \begin{split}
+        eucl: \Reals^3 &\rightarrow \Reals^2 \\
+                           h = \begin{pmatrix}x\\y\\z\end{pmatrix} &\rightarrow \bfx = \begin{pmatrix}x/z\\y/z\end{pmatrix}
+    \end{split}
+\end{equation}
+
+
+We need to compute the jacobian for each corner pixel variation $J^{x_i}_{\T{C}{L}} = J^{x_i}_{h_i} J^{h_i}_{\T{C}{L}} $ (chain rule) where the first jacobian corresponds to the euclideanization and the second the projection to homogeneous coordinates.
+
+Regardind the jacobian with respect to the $SE(3)$ element, we will instead choose to consider the transformation as an element of $SO(3)\times T(3)$ since this is the way poses are treated in Ceres. The projection function and its jacobians with respect to the measured translation and rotation then write:
+
+\begin{equation}
+\begin{split}
+    &h_i = K(\Rot{C}{L}c_i + \prescript{C}{}{t}_L) \\
+    &J^{h_i}_{\prescript{C}{}{t}_L} = K ~~~~~~ J^{h_i}_{\Rot{C}{L}} = -K\Rot{C}{L}[c_i]_{\times}  ~~~~~~  J^{h_i}_{\T{C}{L}} = [J^{h_i}_{\prescript{C}{}{t}_L} ~J^{h_i}_{\Rot{C}{L}}]
+\end{split}
+\end{equation}
+
+The euclideanization jacobian is found to be:
+
+\begin{equation}
+    J^{x_i}_{h_i}
+    =
+    \begin{pmatrix}
+    1/z_i & 0 & -x_i/z_i^2 \\
+    0 & 1/z_i & -y_i/z_i^2
+    \end{pmatrix}
+\end{equation}
+
+Finally, we can stack the 4 jacobians to get the full jacobian to be used for covariance propagation.
+
+\begin{equation}
+    J \triangleq J^{\bfx}_{\T{C}{L}}=
+    \frac{w}{2}
+    \begin{pmatrix}
+    J^{\bfx_1}_{\T{C}{L}} \\ J^{\bfx_2}_{\T{C}{L}} \\ J^{\bfx_3}_{\T{C}{L}} \\ J^{\bfx_4}_{\T{C}{L}}
+    \end{pmatrix}
+    ~ \in \Reals^{8 \times 6}
+\end{equation}
+reintroduction the $\frac{w}{2}$ factor common to the 4 corners. 
+
+We therefore have the covariance propagation equation $Q_{\bfx} = J Q_{\T{C}{L}} J^T$. This equation must be inverted in order to recover the needed covariance. $J$ being non square, we have to use the pseudo inverse to write: $Q_{\T{C}{L}} = pinv(J^T) Q_{\bfx} pinv(J)$. Knowing that the pixel noise covariance is isotropic as explained above, this equation simplifies to:
+
+\begin{equation}
+Q_{\T{C}{L}} = n^2(J^T J)^{-1}    
+\end{equation}
+
+
+
 
 
 \subsubsection*{Kinematic unary factor (Wolf Pose3D)}
@@ -133,92 +290,73 @@ Another option is to fuse in an optimal way the pose measurements based on there
 
 
 \section{Center of mass estimation}
-\subsection{Blibliography}
+\subsection{Motivation}
+In this section we want to derive factors in order to observe inertial quantities of the robot, that is to say its center of mass (COM), center of mass velocity and angular momentum (AM). Many papers have addressed this issue by fusing kinematic and force torque measurements.
+Biblio:
 - Stephens
 - Xinjilefu
+- Bloesch
 - Bloesch student
-- ...
+- Carpentier/Bailly
+- Bae
 
-\subsection{End effector force/torque sensors factor}
-We will here develop a factor graph for the estimation of Center of mass (Com) position, velocity and angular momentum (AM) expressed at the COM using force/torque measurements at the end effectors of a humanoid robot. A relation between these quantities will be derived through the Newton-Euler equations. It will be shown that by expressing these equation at the COM a chosen inertial frame $W$, as it is usually done, we have to include the position, orientation and velocity of a body reference frame, quantities that are not supposed to be known in advance. 
-Therefore, we define a state vector: 
+The common elements of most of these work is that they are decoupled from the estimation of base quantities of the robot (position, velocity, orientation) except for Bae et al. (more biblio needed to confirm). Here we propose to assess the possibility and the possible improvements of considering a more tightly coupled approach, designing a single tightly coupled estimator reconstructing all quantities by solving a nonlinear optimization problem as explained in eq \ref{eq:leastsquare}. The considered quantities are stacked in the state vector: 
 
 \begin{equation*}
 \bfx = [\posi{W}{WB}, \vel{W}{WB}, \Rot{W}{B}, \posi{W}{WC}, \vel{W}{WC}, \prescript{W}{}{\AM}_{c}] 
 \triangleq 
-[\bfp, \bfv, \Rot{}{}, \COM, \dot{\COM}, \AM_c] 
+[\bfp, \bfv, \Rot{}{}, \COM, \COMd, \AM_c] 
 \end{equation*}
 
 where $B$ and $C$ correspond to the frame/frame origin (appropriately) of the robot body and the COM. Notations of the state blocks are simplified in order to make it easier to differentiate them with other terms in the subsequent equations.
 
-With this formulation, the factor will also include IMU measurements so that the control/measurement vector writes: 
+It is assumed that there are enough factors in the problem to make the base quantities observable (Apriltag + IMU factors). We need to define factors constraining the inertial quantities with the other ones in order to make the whole system observable. For this we have access to different sources information.
+\begin{enumerate}
+    \item Force/Torque sensors: placed at the end effectors of the robot, these give us measurements of the contact wrench expressed at the sensor location and in the local frame. 
+    \item Kinematic measurements: based on the inertial kinematic model of the robot, we can retrieve relative transformations and velocities between robot frames as well as a direct measurement of the COM position and velocities relative to the base.
+    \item Base angular velocity: Usually coming from an IMU, we could also consider using angular velocity measurements coming from the robot kinematics
+\end{enumerate}
 
-\begin{equation*}
-% \bfu = [\prescript{B}{}{\bfa}_B, \prescript{B}{}{\bf\omega}_B, \prescript{L}{}{\bff}_l~\prescript{L}{}{\bf\tau_l}]
-\bfu = [\forcem{L}{l}~\torquem{L}{l}]
-\end{equation*}
+We will develop 2 factors: 
 
-for $l \in 1..N$, with N number of force sensors and L the frame attached to this sensor (that we will drop subsequently for shorter notations).
-By integrating measurements from $t_i$ to $t_j$, we wish to derive a factor constraining $\bfx_i$ and $\bfx_j$.
+\begin{itemize}
+    \item An inertial kinematics factor relating inertial quantities with base ones at a given time
+    \item A preintegrated Force/Torque factor combining several successive F/T measurements as well as kinematics quantities to constrain states at distant intervals (freq $\sim$ FTfreq/200)
+\end{itemize}
 
-\subsubsection{Force/torque sensors measurements model}
-Each end effector $l \in 1..N$ is equipped with a sensor measuring forces $\bff \in \mathrm{R}^3$ and pure torques $\tau \in \mathrm{R}^3$ along the three orthogonal axis of its reference frame. The measurements are assumed to be corrupted by a zero mean Gaussian noise:
 
+\subsection{Inertial kinematics}
+\subsubsection{Vectorial equations}
+It is possible to derive equations relating instantaneous relations between inertial quantities and the body quantities through kinematics considerations.
+First, the velocity composition law on the COM between the world and body frame writes in vectorial form:
 \begin{equation}
-\begin{split}
-    \forcem{}{l} = \force{L}{l} + \noise_f~~~~~\noise_f \sim \mathcal{N}(O,Q_{\bff})
-    \\
-    \torquem{}{l} = \torque{L}{l} + \noise_{\tau} ~~~~~ \noise_{\tau} \sim \mathcal{N}(O,Q_{\tau})
-\end{split}
-\end{equation} 
-
-\textbf{Unknown biases} drifting with time could potentially be added and estimated (TBD). 
-In all equations, unless otherwise specified \textbf{kinematic measurements} (depending on ($q$ and $\dot{q}$) are considered to be exact. We should consider adding them in the measurement vector in a second time to account for encoder noises or flexibilities.
-For lighter notation we will subsequently omit the measurement frame of references noting simply \(\forcem{}{l}\) and \(\torquem{}{l}\) for force and torque measurement values.
-
-
-\subsubsection{COM state dynamics driven by force/torque sensors}
-The Newton-Euler equations at the COM with respect to an inertial frame can be written:
-
-\begin{equation}
-\begin{split}
-m\ddot{\COMv}&= m\gravv + \sum_l \forcev{l}
-\\
-\dot{\AMv}_c&= \sum_l \torquev{l} + ( \posiv{WL} - \COMv) \times \forcev{l} 
-\end{split}
-\label{eq:NewtonEuler}
+\dot{\COMv} = \velv{B} + \angvelv{B} \times \posiv{BC}(q_A) + \velv{BC}(q,\dot{q}) 
 \end{equation}
 
-where \(\posiv{L} \) is the position vector of each end effector in the inertial frame.
-
-Incorporating the measurements model in equation \ref{eq:NewtonEuler} and expressing it in the world frame \(W\), we derive the equations:
+The angular momentum of a multibody system can be decomposed in two terms as follows.
 
 \begin{equation}
-\begin{split}
-m\ddot{\COM}&= 
-m\bfg + \Rot{}{} \sum_l \Rot{B}{L}(q) (\forcem{}{l} - \noise_f) 
-\\
-\dot{\AM}_c&= 
-\sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\Rot{}{} \posi{B}{CL}(q)) \times (\Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
-\\
-&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bias_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
-\end{split}
+\AMv_c = \bfI(q_A) \angvelv{B} + \AMv_q (q,\dot{q})   
 \end{equation}
 
-It can be reformulated as the state-space model equation on the COM related variables \( \frac{d\bfx_c}{dt}= f(\bfx_c, \bfu, t)$ with $\bfx_c = [\COM, \dot{\COM}, \AM_c]\):
+where
+
+\begin{itemize}
+    \item \( \angvel{}{B} \): angular velocity vector describing the rotation rate of frame B with respect to the observer inertial frame
+    \item \( \bfI(q_A) \): inertia matrix of the robot expressed at the COM
+    \item \( \AM_q (q,\dot{q}) \): Angular momentum of the limbs ("gesticulation")
+\end{itemize}
+
+\textbf{HYP}: the inertia matrix and gesticulation terms are perfectly known: they don't enter the system as measurements but as "parameters". This could be relaxed once it is tested in simulation.
+
+Also very simply, the COM position (in the world frame) can be transformed from its position in body frame:
 
 \begin{equation}
-\begin{split}
-\frac{d\COM}{dt} &= \dot{\COM} 
-\\
-\frac{d\dot{\bfc}}{dt}&= \bfg + \frac{1}{m} \Rot{}{} \sum_l \Rot{B}{L}(q) (\forcem{}{l} - \noise_f) 
-\\
-\frac{d\AM_c}{dt}&= \Rot{}{} \sum_l \Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\posi{B}{BL}(q) - (\posim{B}{BC}(q)) -  \bias_{p} - \noise_p) \times (\Rot{B}{L}(q)(\forcem{}{l} - \noise_f))
-\end{split}
-\label{eq:COMContinuous}
+    \COM = \Rot{}{} \posi{B}{BC}(q_A) + \posi{}{}
 \end{equation}
 
-Great care should be given defining a measurement model for \(\posi{B}{BC}(q)\). This data is potentially corrupted by 3 factors:
+\subsubsection{Sensor model}
+Great care should be given defining a measurement model for \(\posi{B}{BC}(q_A)\). This data is potentially corrupted by 3 factors:
 
 \begin{itemize}
     \item encoder noise
@@ -230,7 +368,7 @@ While the first term could be regarded as a Gaussian perturbation, the two other
 We will consider the quantity $\posi{b}{BC}$  as a measurement disturbed by a Gaussian noise and a time varying bias considered constant during pre-integration period.
 
 \begin{equation}
-\posim{B}{BC} = \posi{B}{BC}(q) + \bias_{p} + \noise_p 
+\posim{B}{BC} = \posi{B}{BC}(q_A) + \bias_{p} + \noise_p 
 \end{equation}
 
 
@@ -238,25 +376,168 @@ All other terms computed through direct kinematics are in first hand considered 
 
 \begin{equation}
 \begin{split}
-\posim{A}{AB} = \posi{A}{AB}(q) + \noise_p ~~~ \noise_p \sim \Gaussian{0}{Q_p}, ~ Q_p \in \mathrm{R}^{3\times 3} 
+\posim{A}{AB} = \posi{A}{AB}(q_A) + \noise_p ~~~ \noise_p \sim \Gaussian{0}{Q_p}, ~ Q_p \in \Reals^{3\times 3} 
 \\
-\velm{A}{AB} = \vel{A}{AB}(q) + \noise_v ~~~ \noise_v \sim \Gaussian{0}{Q_v}, ~ Q_v \in \mathrm{R}^{3\times 3} 
+\velm{A}{AB} = \vel{A}{AB}(q_A) + \noise_v ~~~ \noise_v \sim \Gaussian{0}{Q_v}, ~ Q_v \in \Reals^{3\times 3} 
 \\
-\Rotm{A}{B} = \Rot{A}{B}(q) Exp(\phi) ~~~ \phi \sim \Gaussian{0}{Q_{\phi}}, ~ Q_{\phi} \in \mathrm{R}^{3\times 3}
+\Rotm{A}{B} = \Rot{A}{B}(q_A) Exp(\phi) ~~~ \phi \sim \Gaussian{0}{Q_{\phi}}, ~ Q_{\phi} \in \Reals^{3\times 3}
 \end{split}
 \end{equation}
  
-An \textbf{important} thing to take into account is the fact that some of the kinematic measurement noise can be correlated. For instance the relative position shoulder-hand is strongly correlated with the shoulder-elbow one. Some others are less obvious (hand velocity/hand position?). As for the relative poses measurements, one way to deal with these hard to model correlations is to decompose the measurements so that the noise random variables can be reasonably considered independent. One idea is to consider (if such exists) a root frame by which the considered kinematic chain is passing. For instance   
+An \textbf{important} thing to take into account is the fact that some of the kinematic measurement noise can be correlated. For instance the relative position shoulder-hand is strongly correlated with the shoulder-elbow one. Some others are less obvious (hand velocity/hand position?). As for the relative poses measurements, one way to deal with these hard to model correlations is to decompose the measurements so that the noise random variables can be reasonably considered independent. One idea is to consider (if such exists) a root frame by which the considered kinematic chain is passing.
+
+\subsubsection{Factor formulation}
+
+Given the previously explained measurement models of $\angvel{B}{WB}$ and $\posi{B}{BC}$, we can project these equations in the world frame. We also add a relation between the COM position expressed in the world frame and its body frame relative measurement:
+
+\begin{equation}
+\begin{split}
+\COM &= \Rot{}{} (\posim{B}{BC} -  \bias_{p} - \noise_p) + \posi{}{}
+\\
+\COMd &= \vel{}{} + \Rot{}{}((\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) \times (\posim{B}{BC} -  \bias_{p} - \noise_p) + (\velm{B}{BC} - \noise_v))
+\\
+\AM_c &= \Rot{}{}(\bfI(q_A) (\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) + \AM_q (q,\dot{q}))
+\end{split}
+\end{equation}
+
+Given these equations, we will now define error random variables as a function of the states and their related covariance matrix. The direct kinematics is easy to put in the form $y = h(x) + n$ and therefore the error function is simply  $e(x) = y - h(x) ~~~ e \sim \Gaussian{0}{Q_n}$. 
+
+\begin{equation}
+\begin{split}
+\bfe_{ikin}(\posi{}{}, \Rot{}{}, \vel{}{}, \COM, \COMd, \AM_c, \bias_p, \bias_{\omega}, \noise_p, \noise_v, \noise_{\omega}) &= 
+\begin{pmatrix}
+\bfe_{\COM}(\COM, \posi{}{}, \Rot{}{}, \noise_p)
+\\
+\bfe_{\COMd}(\COMd, \vel{}{}, \Rot{}{}, \bias_{\omega}, \bias_p, \noise_p, \noise_v, \noise_{\omega})
+\\
+\bfe_{\AM_c}(\AM_c, \Rotm{}{}, \bias_{\omega}, \noise_{\omega})
+\end{pmatrix}
+\\
+&=
+\begin{pmatrix}
+\posim{B}{BC} + \noise_p - (\Rot{}{}^T(\COM - \posi{}{}) + \bias_{p})
+\\
+(\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) \times (\posim{B}{BC} -  \bias_{p} - \noise_p) + \velm{B}{BC} - \noise_v - \Rot{}{}^T(\COMd - \vel{}{})
+\\
+\bfI(q_A) (\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) + \AM_q (q,\dot{q}) - \Rot{}{}^T\AM_c
+\end{pmatrix}
+\end{split}
+\end{equation}
+
+The second requires linearization with regard to the biases $\noise_{\omega}$ and $\noise_{p}$ in order to get its covariance matrix. Keeping the noise terms:
+
+\begin{equation}
+    \bfe_{\COMd} = cst(\noise_{\omega}, \noise_{p}, \noise_{v}) - [\angvelm{B}{B} - \bias_{\omega}]_{\times}\noise_p + [\posim{B}{BC} -  \bias_{p}]_{\times}\noise_{\omega} - \noise_v + \noise_{\omega}\times\noise_p
+\end{equation}
+
+Neglecting the last nonlinear term in the $\COMd$ equation, we thus have a linear relation between measurement noises and error functions. 
+Noting $\bfe_n$ the noisy error (random variable), we can derive the linear transformation from $\bfe_n$ with respect to the noise vector $\noise_{ikin} = (\noise_p^T, \noise_v^T, \noise_{\omega}^T)^T$.
+
+\begin{equation}
+\bfJ^{\bfe}_{\noise} = 
+\begin{pmatrix}
+\Ident & 0 & 0 
+\\
+- [\angvelm{B}{B} - \bias_{\omega}]_{\times} & -\Ident & [\posim{B}{BC} -  \bias_{p}]_{\times}
+\\
+0 & 0 & -\bfI(q_A)
+\end{pmatrix}
+\end{equation}
+
+Then the covariance matrix associated to the error vector is $Q_e = \bfJ^{\bfe_{ikin}}_{\noise_{ikin}} Q_{\noise_{ikin}} \bfJ^{\bfe_{ikin} T}_{\noise_{ikin}}$ and the residual passed to the solver is $r_{ikin} = Q_{\bfe_{ikin}}^{-1/2} \bfe_{ikin}$.
+
+Defining $\bar{\angvel{}{}} = \angvelm{}{} - \bias_{\angvel{}{}}$,  $\bar{p} = \posim{B}{BC} - \bias_p$, the covariance structure is:
+
+\begin{equation}
+Q_{ikin} = 
+\begin{pmatrix}
+Q_p  &  Q_p[\bar{\omega}]_{\times} & 0
+\\
+-[\bar{\omega}]_{\times}Q_p & Q_{pv\omega}& -[\bar{p}]_{\times}Q_{\omega}\bfI(q_A)
+\\
+0 & -Q_{\omega}\bfI(q_A)[\bar{p}]_{\times} & \bfI(q_A)Q_{\omega}\bfI(q_A)
+\end{pmatrix}
+\end{equation}
+
+where $Q_{pv\omega} = -[\bar{\omega}]_{\times}Q_p[\bar{\omega}]_{\times} + Q_v - [\bar{p}]_{\times}Q_{\omega}[\bar{p}]_{\times} $.
+
+One thing to note is that the jacobian depends on the current bias estimates. Either the bias at the factor creation should be used hence the jacobian is constant and does not have to be recomputed or we recompute the covariance matrix each time a new bias estimate is available.
+
+
+\subsection{Force/torque sensors factor}
+A relation between these quantities will be derived through the Newton-Euler equations. It will be shown that by expressing these equation at the COM a chosen inertial frame $W$, as it is usually done, the position velocity and orientation appear naturaly in the equations.
+With this formulation, the factor will also include a base angular velocity measurements source, usually coming from the IMU or differential kinematics.
+
+\subsubsection{Vectorial equations}
+The Newton-Euler equations at the COM with respect to an inertial frame can be written:
+
+\begin{equation}
+\begin{split}
+m\ddot{\COMv}&= m\gravv + \sum_l \forcev{l}
+\\
+\dot{\AMv}_c&= \sum_l \torquev{l} + ( \posiv{L} - \COMv) \times \forcev{l} 
+\end{split}
+\label{eq:NewtonEuler}
+\end{equation}
+
+where \(\posiv{L} \) is the position vector of each end effector in the inertial frame.
+
+\subsubsection{Force/torque sensors measurements model}
+
+Each end effector $l \in 1..N$ is equipped with a sensor measuring forces $\bff \in \Reals^3$ and pure torques $\tau \in \Reals^3$ along the three orthogonal axis of its reference frame. The measurements are assumed to be corrupted by a zero mean Gaussian noise:
+
+\begin{equation}
+\begin{split}
+    \forcem{}{l} = \force{L}{l} + \noise_f~~~~~\noise_f \sim \mathcal{N}(O,Q_{\bff})
+    \\
+    \torquem{}{l} = \torque{L}{l} + \noise_{\tau} ~~~~~ \noise_{\tau} \sim \mathcal{N}(O,Q_{\tau})
+\end{split}
+\end{equation} 
+for $l \in 1..N$, with N number of force sensors and L the frame attached to this sensor (that we will drop subsequently for shorter notations).
+
+\textbf{Unknown biases} drifting with time could potentially be added and estimated (TBD). 
+In all equations, unless otherwise specified kinematic measurements (depending on $q$ and $\dot{q}$) are considered to be exact. We should consider adding them in the measurement vector in a second time to account for encoder noises or flexibilities.
+For lighter notation we will subsequently omit the measurement frame of references noting simply \(\forcem{}{l}\) and \(\torquem{}{l}\) for force and torque measurement values.
+
+By integrating measurements from $t_i$ to $t_j$, we wish to derive a factor constraining $\bfx_i$ and $\bfx_j$.
+
+\subsubsection{Factor formulation}
+Incorporating the measurements model in equation \ref{eq:NewtonEuler} and expressing it in the world frame \(W\), we derive the equations:
+
+\begin{equation}
+\begin{split}
+m\ddot{\COM}&= 
+m\bfg + \Rot{}{} \sum_l \Rot{B}{L}(q_A) (\forcem{}{l} - \noise_f) 
+\\
+\dot{\AM}_c&= 
+\sum_l \Rot{}{}\Rot{B}{L}(q_A)(\torquem{}{l} - \noise_{\tau}) + (\Rot{}{} \posi{B}{CL}(q_A)) \times (\Rot{}{}\Rot{B}{L}(q_A)(\forcem{}{l} - \noise_f))
+\\
+&= \sum_l \Rot{}{}\Rot{B}{L}(q_A)(\torquem{}{l} - \noise_{\tau}) + \Rot{}{}( \posi{B}{BL}(q_A) - (\posim{B}{BC}(q_A)) -  \bias_{p} - \noise_p) \times (\Rot{B}{L}(q_A)(\forcem{}{l} - \noise_f))
+\end{split}
+\end{equation}
+
+It can be reformulated as the state-space model equation on the COM related variables \( \frac{d\bfx_c}{dt}= f(\bfx_c, \bfu, t)$ with $\bfx_c = [\COM, \COMd, \AM_c]\):
+
+\begin{equation}
+\begin{split}
+\frac{d\COM}{dt} &= \COMd 
+\\
+\frac{d\dot{\bfc}}{dt}&= \bfg + \frac{1}{m} \Rot{}{} \sum_l \Rot{B}{L}(q_A) (\forcem{}{l} - \noise_f) 
+\\
+\frac{d\AM_c}{dt}&= \Rot{}{} \sum_l \Rot{B}{L}(q_A)(\torquem{}{l} - \noise_{\tau}) + (\posi{B}{BL}(q_A) - (\posim{B}{BC}(q_A)) -  \bias_{p} - \noise_p) \times (\Rot{B}{L}(q_A)(\forcem{}{l} - \noise_f))
+\end{split}
+\label{eq:COMContinuous}
+\end{equation}
 
 
 We now need to discretize this continuous system to define factors between successive times. We integrate \ref{eq:COMContinuous} between 2 consecutive measurements ($t_k$ and $t_{k+1}$ $\Delta t = t_{k} - t_{k-1}$)  We use a simple first order approximation (forward Euler) which consists in assuming a zero order hold on measurements. We may also add a second order term for the com position since we have measurements on its acceleration.
 
 \begin{equation}
 \begin{split}
-\COM^{k+1} &= \COM^{k} + \dot{\COM}^{k} \Delta t 
+\COM^{k+1} &= \COM^{k} + \COMd^{k} \Delta t 
 + \dfrac{1}{2}(\bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k})) \Delta t^2
 \\
-\dot{\COM}^{k+1}&= \dot{\COM}^{k} + (\bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k})) \Delta t 
+\COMd^{k+1}&= \COMd^{k} + (\bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k})) \Delta t 
 \\
 \AM_c^{k+1} &= \AM_c^{k} +  ( 
 \Rot{}{}^{k}\sum_l \Rot{B}{L}(q^{k})(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^k + \noise_p^k) \times \Rot{B}{L}(q^{k})(\forcem{}{l}^{k} - \noise_f^{k}) 
@@ -269,58 +550,70 @@ with discrete noise quantities distributed according to \( \mathcal{N}(O,\frac{Q
 
 
 \subsubsection{Factor between successive measurements}
-Based on equations \ref{eq:COMDiscrete}, we will define the 3 functions \(g_1\), \(g_2\) and \(g_3\) specifying which variables they depend on:
+Based on equations \ref{eq:COMDiscrete}, we can define the 3 functions \(g_1\), \(g_2\) and \(g_3\) specifying which variables they depend on:
 
 \begin{equation}
 \begin{split}
-\COM^{k+1} - \COM^{k} &=  g_1(\dot{\COM}^{k}, \Rot{}{}^{k}, \noise_f^{k})
+\COM^{k+1} - \COM^{k} &=  g_1(\COMd^{k}, \Rot{}{}^{k}, \noise_f^{k})
 \\
-\dot{\COM}^{k+1} - \dot{\COM}^{k} &= g_2(\Rot{}{}^{k}, \noise_f^{k}) 
+\COMd^{k+1} - \COMd^{k} &= g_2(\Rot{}{}^{k}, \noise_f^{k}) 
 \\
 \AM_c^{k+1} - \AM_c^{k} &= g_3(\Rot{}{}^{k}, \bias_{p}^k, \noise_p^k, \noise_f^{k}, \noise_\tau^{k})
 \end{split}
 \end{equation}
 
-In order to propagate the measurement covariances, we need to derive the related jacobians.
+However this formulation requires to create new variables (Key Frames) at the measurement frequency which quickly becomes intractable if the older states are not marginalized (windowed optimization). However, a mathematical trick enables to preintegrate consecutive measurements to create factors between distant (Lupton \cite{lupton2011visual}/Forster's \cite{forster2016manifold} preintegration).  
 
 \subsubsection{Pre-integrated COM factor}
-Solved for COM position and velocity but AM is less obvious (different possibilities are presented). Adding measurements between 2 arbitrary timestamps \(t_i\) and \(t_j\) with \(\Delta t_{ij} \triangleq t_j - t_i\), we get the equations:
+This section is very much inspired by the structure, developments and notations of \cite{forster2016manifold}.
+Adding measurements between 2 arbitrary timestamps \(t_i\) and \(t_j\) with \(\Delta t_{ij} \triangleq t_j - t_i\), we get the equations:
 
 \begin{equation}
 \begin{split}
 \COM^{j} - \COM^{i} &= \sum_{k=i}^{j-1} \Big[ 
-\dot{\COM}^{k} \Delta t 
+\COMd^{k} \Delta t 
 + \dfrac{1}{2}\bfg \Delta t^2 + \frac{1}{2m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k})\Delta t^2 \Big]
 \\
-\dot{\COM}^{j} - \dot{\COM}^{i} &= \sum_{k=i}^{j-1} \Big[ 
+\COMd^{j} - \COMd^{i} &= \sum_{k=i}^{j-1} \Big[ 
 \bfg + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Big] \Delta t 
 \\
 \AM_c^{j} - \AM_c^{i} &=  \sum_{k=i}^{j-1} \Rot{}{}^{k} \Big[ 
-\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^k + \noise_p^k) \Big]  \Delta t
+\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k}) - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^k + \noise_p^k) \Big]  \Delta t
 \end{split}
 \label{eq:COMij}
 \end{equation}
 
-
+An important assumption to be made in order to keep the efficiency of the method is to consider that biases terms (angular velocity and relative position) as constant during the preintegration period, that is to say $\forall k \in [i..j-1], \bias_p^k = \bias_p^i $. Therefore, each keyframe is composed of the usual state variables (described earlier) and estimated bias terms considered constant until the next keyframe. This prevents the explosion of state variable number as well as permits to easily debias the preintegrated measurements through first order linearization.
 It is then possible to define a "delta" quantity depending only on the measurements relating the com position, com velocity and Angular Momentum at \(t_i\) and \(t_j\):
 
 \begin{equation}
 \begin{split}
     \Delta \COM_{ij} &\triangleq \Rot{}{}^{i,T} (\COM^j - \COM^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2}\grav \Delta t_{ij}^2) 
     \\
-    &= \sum_{k=i}^{j-1} \Big[ \Delta \dot{\COM}_{ik} \Delta t + \frac{1}{2m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t^2 \Big]
+    &= \sum_{k=i}^{j-1} \Big[ \Delta \COMd_{ik} \Delta t + \frac{1}{2m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t^2 \Big]
 \\
-    \Delta \dot{\COM}_{ij} &\triangleq \Rot{}{}^{i,T} (\dot{\COM}^{k} - \dot{\COM}^{i} - \bfg \Delta t_{ik})
+    \Delta \COMd_{ij} &\triangleq \Rot{}{}^{i,T} (\COMd^{j} - \COMd^{i} - \bfg \Delta t_{ij})
 \\
-    &= \sum_{k=i}^{j-1} \frac{1}{m} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t 
+    &= \frac{1}{m} \sum_{k=i}^{j-1} \Delta R_{ik} \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t 
 \\
     \Delta \AM_{ij} &\triangleq \Rot{}{}^{i,T} (\AM_c^{j} - \AM_c^{i})
 \\
      &=  \sum_{k=i}^{j-1} \Delta R_{ik} \Big[ 
-    \sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^k + \noise_p^k)) \Big]  \Delta t
+    \sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i + \noise_p^k) \Big]  \Delta t
 \end{split}
-\label{eq:COMPreint}
+\label{eq:DeltaDT}
 \end{equation}
+
+where the $\Delta \Rot{}{ik}$ comes from preintegration of the angular velocity measurements which constraints orientation of the base at times $t_i$ and $t_j$.
+
+\begin{equation}
+    \Delta \Rot{}{ij} = \Rot{}{i}^T \Rot{}{j}
+    = \prod_{k=i}^{j-1} Exp((\angvelm{}{}^k - \bias_{\omega}^i - \noise_{\omega}^k)\Delta t)
+    \label{eq:DeltaR}
+\end{equation}
+
+The question is whether or not to include it in the inertial factor. If we want to take into account the between the different quantities due to the angular velocity measurements, we have to include it. In this case the factor is 12 dimension and the covariance has to be propagated accordingly. We  
+
 
 We can then define a recursive scheme to retrieve measurement values and a covariance propagation scheme akin to the IMU pre-integration framework. 
 Difficulties that might come up during implementation:
@@ -330,113 +623,129 @@ Difficulties that might come up during implementation:
     \item COM preint factor noise is correlated with the IMU one since the gyro noise is propagated through it as well.
 \end{itemize}
 
+We will thereafter consider the 2 difficulties as hypothesis: 
+\\
+- angvel and force sensor sources are at the same frequency. 
+\\
+- we have to add the rotation part to the inertial kinematic residual in order to have a properly formulated factor. To recover the 9D residual and 9x9 covariance matrix, these just have to be extracted from the full 12D residual and 12x12 covariance matrix that we will derive thereafter.
 
 
-\subsection{Inertial kinematics}
-It is possible to derive equations relating instantaneous relations between inertial quantities and the body quantities through kinematics considerations.
-First, the velocity composition law on the COM between the world and body frame writes in vectorial form:
-\begin{equation}
-\dot{\COMv} = \angvelv{B} \times \posiv{BC}(q) + \velv{B} + \velv{BC}(q,\dot{q}) 
-\end{equation}
-
-The angular momentum of a multibody system can be decomposed in two terms as follows.
-
-\begin{equation}
-\AMv_c = \bfI(q) \angvelv{B} + \AMv_q (q,\dot{q})   
-\end{equation}
-
-where
-
-\begin{itemize}
-    \item \( \angvel{}{B} \): angular velocity vector describing the rotation rate of frame B with respect to the observer inertial frame
-    \item \( \bfI(q) \): inertia matrix of the robot expressed at the COM available at XXX frame
-    \item \( \AM_q (q,\dot{q}) \): Angular momentum of the limbs ("gesticulation")
-\end{itemize}
-
-Also very simply, the COM position (in the world frame) can be transformed from its position in body frame:
-
-\begin{equation}
-    \COM = \Rot{}{} \posi{B}{BC}(q) + \posi{}{}
-\end{equation}
-
-
-
-Given the previously explained measurement models of $\angvel{B}{WB}$ and $\posi{B}{BC}$, we can project these equations in the world frame. We also add a relation between the COM position expressed in the world frame and its body frame relative measurement:
+Equations \ref{eq:DeltaDT} and \ref{eq:DeltaR} relate state variables at time i and j (left hand side) to the measurements (right hand side). However, since the noise terms are quite intrically spread in the equations, they require more treatment in order to be able to use them to define error functions and covariance of the factor. In order to do that, we will consider a first order approximation in noise terms in order. First, let us consider the $\Delta R_{ij}$ equation \ref{eq:DeltaR}:
 
 \begin{equation}
 \begin{split}
-\COM &= \Rot{}{} (\posim{B}{BC} -  \bias_{p} - \noise_p) + \posi{}{}
+\Delta \Rot{}{ij} &\simeq  \prod_{k=i}^{j-1} Exp(\angvelm{}{}^k - \bias_{\omega}^i) Exp(-J^k_r \noise_{\omega}^k\Delta t)
 \\
-\dot{\COM} &= \vel{}{} + \Rot{}{}((\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) \times (\posim{B}{BC} -  \bias_{p} - \noise_p) + (\velm{B}{BC} - \noise_v))
+&= \Delta \Rotm{}{ij}\prod_{k=i}^{j-1} Exp(- \Delta \Rotm{}{ik+1} J^k_r \noise_{\omega}^k\Delta t)
 \\
-\AM_c &= \Rot{}{}(\bfI(q) (\angvelm{B}{B} - \bias_{\omega} - \noise_{\omega}) + \AM_q (q,\dot{q}))
+&= \Delta \Rotm{}{ij}Exp(-\delta \phi_{ij})
 \end{split}
 \end{equation}
 
-Given these equations, we will now define error random variables as a function of the states and their related covariance matrix. The direct kinematics is easy to put in the form $y = h(x) + n$ and therefore the error function is simply  $e(x) = y - h(x) ~~~ e \sim \Gaussian{0}{Q_n}$. 
+where $J^k_r \triangleq J_r((\angvelm{}{}^k - \bias_{\omega}^i))\Delta t)$ is the right exponential jacobian, the preintegation rotation measurement is defined as 
+\begin{equation}
+    \Delta \Rotm{}{ij} \triangleq \prod_{k=i}^{j-1} Exp(\angvelm{}{}^k - \bias_{\omega}^i)
+\end{equation}
+and the noise term $\delta \phi_{ij}$ will be detailed later. Note that the second inequality comes from the SO(3) exponential useful property that $ Exp(\phi)\Rot{}{} = \Rot{}{} Exp(\Rot{}{}^T \phi)$ applied recursively (with $\Rotm{}{ik+1}$ terms appearing inside the noise exponential).
+
+Then we can treat the relative com velocity equation by using the first order matrix exponential approximation $Exp(\phi) \simeq \Ident + [\phi]_{\times}$:
 
 \begin{equation}
-\bfe_{ikin}(\COM, \dot{\COM}, \AM_c, \posi{}{}, \Rot{}{}, \vel{}{}, \bias_{\omega}, \bias_p) = 
-\begin{pmatrix}
-\bfe_{\COM}(\COM, \posi{}{}, \Rot{}{})
+\begin{split}
+\Delta \COMd_{ij} &\simeq
+\frac{1}{m} \sum_{k=i}^{j-1} \Delta \Rotm{}{ik}(\Ident - [\phi_{ik}]_{\times}) \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t 
 \\
-\bfe_{\dot{\COM}}(\dot{\COM}, \vel{}{}, \Rot{}{}, \bias_{\omega}, \bias_p)\\
-\bfe_{\AM_c}(\AM_c, \Rotm{}{}, \bias_{\omega})
-\end{pmatrix}
-=
-\begin{pmatrix}
-\posim{B}{BC} - (\Rot{}{}^T(\COM - \posi{}{}) + \bias_{p}) 
+&= \Delta \COMdm_{ij} + \frac{1}{m} \sum_{k=i}^{j-1} \Delta \Rotm{}{ik}[\phi_{ik}]_{\times} \sum_l \Rot{B}{L}(q^{k})\noise_f^{k} \Delta t
 \\
-(\angvelm{B}{B} - \bias_{\omega}) \times (\posim{B}{BC} -  \bias_{p}) + \velm{B}{BC} - \Rot{}{}^T(\dot{\COM} - \vel{}{})
-\\
-\bfI(q) (\angvelm{B}{B} - \bias_{\omega}) - \Rot{}{}\AM_c
-\end{pmatrix}
+&= \Delta \COMdm_{ij} - \delta \COMd_{ij}
+\end{split}
 \end{equation}
 
-The second requires linearization with regard to the biases $\noise_{\omega}$ and $\noise_{p}$ in order to get its covariance matrix. Keeping the noise terms:
+where the delta measurement is defined as
+\begin{equation}
+    \Delta \COMdm_{ij} \triangleq \frac{1}{m} \sum_{k=i}^{j-1} \Delta \Rotm{}{ik} \sum_l \Rot{B}{L}(q^{k}) \forcem{}{l}^{k}\Delta t
+\end{equation}
+ and $\delta v_{ij}$ is the delta noise.
+
+We can then inject this formula as well as the rotation one in the $\Delta \COM_{ij}$ equation:
 
 \begin{equation}
-    \bfe_{\dot{\COM}} = cst(\noise_{\omega}, \noise_{p}, \noise_{v}) - [\angvelm{B}{B} - \bias_{\omega}]_{\times}\noise_p + [\posim{B}{BC} -  \bias_{p}]_{\times}\noise_{\omega} - \noise_v + \noise_{\omega}\times\noise_p
+\begin{split}
+\Delta \COM_{ij} &\simeq
+\sum_{k=i}^{j-1} \Big[ (\Delta \COMdm_{ik} - \delta \COMd_{ik}) \Delta t + \frac{1}{2m} \Delta \Rotm{}{ik}(\Ident - [\phi_{ik}]_{\times}) \sum_l \Rot{B}{L}(q^{k}) (\forcem{}{l}^{k} - \noise_f^{k}) \Delta t^2 \Big]
+\\
+&= \Delta \COMm_{ij} - \sum_{k=i}^{j-1} \Big[ \delta \COMd_{ik} \Delta t - \frac{1}{2m} \Delta \Rotm{}{ik}[\phi_{ik}]_{\times} \sum_l \Rot{B}{L}(q^{k}) \noise_f^{k} \Delta t^2 \Big]
+\\
+&= \Delta \COMm_{ij} - \delta \COM_{ij}
+\end{split}
 \end{equation}
 
-Neglecting the last nonlinear term in the $\dot{\COM}$ equation, we thus have a linear relation between measurement noises and error functions. 
-Noting $\bfe_n$ the noisy error (random variable), we can derive the linear transformation from $\bfe_n$ with respect to the noise vector $\noise_{ikin} = (\noise_p^T, \noise_v^T, \noise_{\omega}^T)^T$.
+where the delta measurement is defined as
+\begin{equation}
+    \Delta \COMm_{ij} \triangleq 
+    \sum_{k=i}^{j-1} \Big[\Delta \COMdm_{ik} \Delta t + \frac{1}{2m} \Delta \Rotm{}{ik} \sum_l \Rot{B}{L}(q^{k}) \forcem{}{l}^{k} \Delta t^2 \Big]
+\end{equation}
+ and $\delta \COMd_{ij}$ is the delta noise.
+
+Finally, the same treatment is applied to the delta angular momentum equation.
 
 \begin{equation}
-\bfJ^{\bfe}_{\noise} = 
-\begin{pmatrix}
-\Ident & 0 & 0 
+\begin{split}
+\Delta \COM_{ij} &\simeq
+\sum_{k=i}^{j-1} \Delta \Rotm{}{ik}(\Ident - [\phi_{ik}]_{\times}) \Big[ 
+\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k}) - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i + \noise_p^k)) \Big]  \Delta t
 \\
-- [\angvelm{B}{B} - \bias_{\omega}]_{\times} & -\Ident & [\posim{B}{BC} -  \bias_{p}]_{\times}
+&= \Delta \AMm_{ij} -\sum_{k=i}^{j-1} \Delta \Rotm{}{ik}[\phi_{ik}]_{\times} \Big[ 
+\sum_l - \Rot{B}{L}(q^{k-1}) \noise_{\tau}^{k} - %%% add a second split?
+\forcem{}{l}^{k} \times \noise_p^k - (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i) \times \noise_f^{k} + \noise_f^{k} \times \noise_p^k) \Big]  \Delta t
 \\
-0 & \Ident & 0
-\end{pmatrix}
+&\simeq \Delta \AMm_{ij} -\sum_{k=i}^{j-1} \Delta \Rotm{}{ik}[\phi_{ik}]_{\times} \Big[ 
+\sum_l - \Rot{B}{L}(q^{k-1}) \noise_{\tau}^{k} -
+\forcem{}{l}^{k} \times \noise_p^k - (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i) \times \noise_f^{k}) \Big]  \Delta t
+\\
+&= \Delta \AMm_{ij} - \delta \AM_{ij}
+\end{split}
 \end{equation}
 
-Then the covariance matrix associated to the error vector is $Q_e = \bfJ^{\bfe_{ikin}}_{\noise_{ikin}} Q_{\noise_{ikin}} \bfJ^{\bfe_{ikin} T}_{\noise_{ikin}}$ and the residual passed to the solver is $r_{ikin} = Q_{\bfe_{ikin}}^{-1/2} \bfe_{ikin}$.
+where the delta measurement is defined as 
+\begin{equation}
+    \Delta \AMm_{ij} \simeq -\sum_{k=i}^{j-1} \Rotm{}{ik}[\phi_{ik}]_{\times} \Big[ 
+    \sum_l -\Rot{B}{L}(q^{k-1}) \torquem{}{l}^{k} - \forcem{}{l}^{k} \times (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i) \Big]  \Delta t
+\end{equation}
+and $\delta \AM_{ij}$ is the delta noise. Note that we neglect the cross products of force and position noises $\noise_f^{k} \times \noise_p^k$ to keep only terms linear in the noise variables.
 
-Defining $\bar{\omega} = $ and $\bar{\posi{}{}} = $, the covariance structure is:
+The measurement model of delta quantities is therefore:
 
 \begin{equation}
-Q_{ikin} = 
-\begin{pmatrix}
-Q_p  &  Q_p[\bar{\omega}]_{\times} & 0
+\begin{split}
+\Delta \COMm_{ij}  &= \Rot{}{}^{i,T} (\COM^j - \COM^i - \vel{}{}^i \Delta t_{ij} - \frac{1}{2}\grav \Delta t_{ij}^2) + \delta \COM_{ij} 
 \\
--[\bar{\omega}]_{\times}Q_p & Q_{pv\omega}& -Q_v
+\Delta \COMdm_{ij} &= \Rot{}{}^{i,T} (\COMd^{j} - \COMd^{i} - \bfg \Delta t_{ij}) + \delta \COMd_{ij}
 \\
-0 & -Q_v & Q_v
-\end{pmatrix}
+\Delta \AMm_{ij}   &= \Rot{}{}^{i,T} (\AM_c^{j} - \AM_c^{i}) + \delta \AM_{ij}
+\\
+\Delta \Rotm{}{ij} &= \Rot{}{}^{i,T} \Rot{}{}^{j} Exp(\delta \phi_{ij})
+\end{split}
 \end{equation}
 
-where $Q_{pv\omega} = -[\bar{\omega}]_{\times}Q_p[\bar{\omega}]_{\times} + Q_v - [\bar{p}]_{\times}Q_{\omega}[\bar{p}]_{\times} $ 
 
-and $\bar{\angvel{}{}} = \angvelm{}{} - \bias_{\angvel{}{}}$,  $\bar{p} = \posim{B}{BC} - \bias_p \bias_{\angvel{}{}}$
+\paragraph{Noise propagation}
+We can define a noise vector $\noise_{ij} = [\delta \COM_{ij}^T, \delta \COMd_{ij}^T, \delta \AM_{ij}^T, \phi_{ij}^T]$ and look for its statistics.
 
-One thing to note is that the jacobian depends on the current bias estimates. Either the bias at the factor creation should be used hence the jacobian is constant and does not have to be recomputed or we recompute the covariance matrix each time a new bias estimate is available.
+
+
+
+
+
+\subsubsection{Bias updates}
+
+
+
 
 \subsection{TODO/TOASK/IDEAS}
 \begin{itemize}
     \item Add Delta R in COM factor as is done in Wisth 2019 for velocity preint?
+    \item Joint torque measurements?
     % \item Add external force/moment to the estimated state? 
     % \item use Thomas' estimator as a source of velocity measurements?
 \end{itemize}
@@ -614,8 +923,8 @@ Instead of using the biased kinematic measurement $\posim{B}{BC}$, we can
 
 \begin{equation}
 \begin{split}
-\frac{d\AM_c}{dt}&= \sum_l \Rot{}{}\Rot{B}{L}(q)(\torquem{}{l} - \noise_{\tau}) + (\bfp +
-\Rot{}{}\posi{B}{BL}(q) - \COM)) \times \Rot{}{}\Rot{B}{L}(q)(\forcem{}{l} - \noise_f)
+\frac{d\AM_c}{dt}&= \sum_l \Rot{}{}\Rot{B}{L}(q_A)(\torquem{}{l} - \noise_{\tau}) + (\bfp +
+\Rot{}{}\posi{B}{BL}(q_A) - \COM)) \times \Rot{}{}\Rot{B}{L}(q_A)(\forcem{}{l} - \noise_f)
 \end{split}
 \label{eq:AMContinuousRandomNotes}
 \end{equation}
@@ -652,21 +961,17 @@ We can also derive the angular momentum equations in the inertial frame attached
 \begin{equation}
 \begin{split}
     \frac{d \prescript{L*}{}{\AM}_c}{dt} &=
-    (\torquem{}{l} - \noise_{\tau}) + \posi{L*}{CL*}(q) \times (\forcem{}{l*} - \noise_f)
+    (\torquem{}{l} - \noise_{\tau}) + \posi{L*}{CL*}(q_A) \times (\forcem{}{l*} - \noise_f)
     \\
-    &= (\torquem{}{l} - \noise_{\tau}) + (\Rot{L*}{B}(q)\Rot{}{}^T(\bfp - \COM) + \posi{L*}{BL*}(q)) \times (\forcem{}{l*} - \noise_f)
+    &= (\torquem{}{l} - \noise_{\tau}) + (\Rot{L*}{B}(q_A)\Rot{}{}^T(\bfp - \COM) + \posi{L*}{BL*}(q_A)) \times (\forcem{}{l*} - \noise_f)
 \end{split}
 \end{equation}
  
 but again this leads to untangled equations that cannot be pre-integrated.
 
 
-\bibliography{biblio}
-\bibliographystyle{plainnat}
 
-
-
-
+\printbibliography
 
 
 
