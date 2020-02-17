@@ -7,6 +7,7 @@
 \usepackage{textcomp}
 \usepackage{biblatex}
 
+\usepackage{graphicx}
 \usepackage{amsmath,mathtools,amssymb}
 
 
@@ -467,8 +468,10 @@ One thing to note is that the jacobian depends on the current bias estimates. Ei
 
 
 \subsection{Force/torque sensors factor}
-A relation between these quantities will be derived through the Newton-Euler equations. It will be shown that by expressing these equation at the COM a chosen inertial frame $W$, as it is usually done, the position velocity and orientation appear naturaly in the equations.
+A relation between these quantities will be derived through the Newton-Euler equations. It will be shown that by expressing these equation at the COM a chosen inertial frame $W$, as it is usually done, the position velocity and orientation appear naturally in the equations.
 With this formulation, the factor will also include a base angular velocity measurements source, usually coming from the IMU or differential kinematics.
+
+\textit{Notation note}: The robot is considered to possess N limbs equipped with 6D wrench sensors which measurements will be indexed by the lowercase $l$. We will denote by $L$ the sensor frame associated with limb $l$.
 
 \subsubsection{Vectorial equations}
 The Newton-Euler equations at the COM with respect to an inertial frame can be written:
@@ -534,35 +537,93 @@ It can be reformulated as the state-space model equation on the COM related vari
 
 We now need to discretize this continuous system to define factors between successive times. We integrate \ref{eq:COMContinuous} between 2 consecutive measurements ($t_k$ and $t_{k+1}$ $\delta t = t_{k} - t_{k-1}$)  We use a simple first order approximation (forward Euler) which consists in assuming a zero order hold on measurements. We may also add a second order term for the com position since we have measurements on its acceleration.
 
+\begin{small}
 \begin{equation}
 \begin{split}
 \COM^{k} &= \COM^{k-1} + \COMd^{k-1} \delta t 
-+ \dfrac{1}{2}(\bfg + \frac{1}{m} \Rot{}{}^{k-1} \sum_l \Rot{B}{L}(q^{k-1}) (\forcem{}{l}^{k-1} - \noise_f^{k-1})) \Delta t^2
++ \frac{1}{2} \bfg \delta t^2 + \frac{1}{2m} \Rot{}{}^{k-1} \sum_l \Rot{B}{L}(q^{k-1}) (\forcem{}{l}^{k-1} - \noise_f^{k-1}) \delta t^2
 \\
-\COMd^{k}&= \COMd^{k-1} + (\bfg + \frac{1}{m} \Rot{}{}^{k-1} \sum_l \Rot{B}{L}(q^{k-1}) (\forcem{}{l}^{k-1} - \noise_f^{k-1})) \delta t 
+\COMd^{k}&= \COMd^{k-1} + \bfg \delta t + \frac{1}{m} \Rot{}{}^{k-1} \sum_l \Rot{B}{L}(q^{k-1}) (\forcem{}{l}^{k-1} - \noise_f^{k-1}) \delta t 
 \\
 \AM_c^{k} &= \AM_c^{k-1} +  ( 
 \Rot{}{}^{k-1}\sum_l \Rot{B}{L}(q^{k-1})(\torquem{}{l}^{k-1} - \noise_{\tau}^{k-1}) + (\posi{B}{BL}(q^{k-1}) - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1} + \noise_p^{k-1}) \times \Rot{B}{L}(q^{k-1})(\forcem{}{l}^{k-1} - \noise_f^{k-1}) 
-) \Delta t
+) \delta t
 \end{split}
 \label{eq:COMDiscrete}
 \end{equation}
+\end{small}
 
-with discrete noise quantities distributed according to \( \mathcal{N}(O,\frac{Q}{\Delta t}) \), \(Q\) being the corresponding continuous covariance.
+with discrete noise quantities distributed according to \( \mathcal{N}(O,\frac{Q}{\delta t}) \), \(Q\) being the corresponding continuous covariance.
 
 
 \subsubsection{Factor between successive measurements}
-Based on equations \ref{eq:COMDiscrete}, we can define the 3 functions \(g_1\), \(g_2\) and \(g_3\) specifying which variables they depend on:
+Based on equations \ref{eq:COMDiscrete}, we can express the relationships as measurement functions $\bfy_{FT} = h_{FT}(\bfx) + \noise_{FT}$:
 
+\begin{small}
 \begin{equation}
 \begin{split}
-\COM^{k}  &= g_1(\COM^{k-1}, \COMd^{k}, \Rot{}{}^{k-1}, \noise_f^{k})
-\\
-\COMd^{k} &= g_2(\COMd^{k-1}, \Rot{}{}^{k-1}, \noise_f^{k}) 
-\\
-\AM_c^{k} &= g_3(\AM_c^{k-1}, \Rot{}{}^{k-1}, \bias_{p}^k, \noise_p^k, \noise_f^{k}, \noise_\tau^{k})
+	\frac{1}{2m}\sum_l \Rot{B}{L}^{k-1} \forcem{}{l}^{k-1}\delta t^2 =& 
+	\Rot{}{}^{k-1,T}(\COM^{k} - \COM^{k-1} - \COMd^{k-1} \delta t - \frac{1}{2} \bfg \delta t^2)
+	+ \frac{1}{2m}\sum_l \Rot{B}{L}^{k-1} \noise_f^{k-1}\delta t^2
+	\\
+	\frac{1}{m} \sum_l \Rot{B}{L}^{k-1} \forcem{}{l}^{k-1} \delta t =& \Rot{}{}^{k-1,T}(\COMd^{k} - \COMd^{k-1} - \bfg \delta t) 
+	+ \frac{1}{m} \sum_l \Rot{B}{L}^{k-1} \noise_f^{k-1} \delta t	
 \end{split}
+\label{eq:CCdFactor}
 \end{equation}
+\end{small}
+
+\begin{small}
+\begin{equation}
+\begin{split}
+	(\sum_l \Rot{B}{L}^{k-1}\torquem{}{l}^{k-1} + (\posi{B}{BL}^{k-1} - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1}) \times \Rot{B}{L}^{k-1}\forcem{}{l}^{k-1}) \delta t = 
+	\Rot{}{}^{k-1,T}(\AM_c^{k} - \AM_c^{k-1})
+	\\
+	+ (\sum_l \Rot{B}{L}^{k-1}\noise_{\tau}^{k-1} + (\posi{B}{BL}^{k-1} - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1})\times \Rot{B}{L}^{k-1}\noise_f^{k-1}  + \Rot{B}{L}^{k-1}\forcem{}{l}^{k-1}  \times \noise_p^{k-1} + \noise_p \times \noise_f)\delta t
+\end{split}
+\label{eq:LcFactor}
+\end{equation}
+\end{small}
+
+\begin{equation}
+\bfy_{FT} =
+\begin{pmatrix}
+y_{\COM} \\ y_{\COMd} \\ y_{\AM}(\bias_{p}^{k-1})
+\end{pmatrix}
+=
+\begin{pmatrix}
+h_{\COM}(\COM^{k}, \COM^{k-1}, \COMd^{k}, \Rot{}{}^{k-1})
+\\
+h_{\COMd}(\COMd^{k}, \COMd^{k-1}, \Rot{}{}^{k-1}) 
+\\
+h_{\AM}(\AM_c^{k}, \AM_c^{k-1}, \Rot{}{}^{k-1})
+\end{pmatrix}
++
+\begin{pmatrix}
+\noise_{\COM}(\noise_f^{k})
+\\
+\noise_{\COMd}(\noise_f^{k})
+\\
+\noise_{\AM}(\bias_{p}^k, \noise_p^k, \noise_f^{k}, \noise_\tau^{k})
+\end{pmatrix}
+\end{equation}
+
+Then, to get the covariance matrix of $\noise_{FT}$, we have to recover the linear relation $\noise_{FT} = J^{\noise_{FT}}_{\noise_{ft}}$ from eqs \ref{eq:CCdFactor} and \ref{eq:LcFactor} with $\noise_{f} = (\noise_f, \noise_{\tau}, \noise_p)$.
+
+Neglecting the nonlinear term $\noise_p \times \noise_f$ in eq \ref{eq:LcFactor}, we get:
+
+\begin{equation}
+	J^{\noise_{FT}}_{\noise_{ft}} =
+	\begin{pmatrix}
+	\frac{1}{2m}\sum_l \Rot{B}{L}^{k-1} \delta t^2 & 0 & 0
+	\\
+	\frac{1}{m}\sum_l \Rot{B}{L}^{k-1} \delta t & 0 & 0
+	\\
+	[\posi{B}{BL}^{k-1} - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1}]_{\times} \Rot{B}{L}^{k-1} & \Rot{B}{L}^{k-1} & [\Rot{B}{L}^{k-1}\forcem{}{l}^{k-1}]_{\times}
+	\end{pmatrix}
+\end{equation}
+
+Then $Q_{\noise_{FT}} = J^{\noise_{FT}}_{\noise_{ft}} Q_{\noise_{ft}} J^{\noise_{FT},T}_{\noise_{ft}}$. Note that the jacobian depends on the bias variable and that therefore the covariance should be recomputed at each new solve of the problem.
 
 However this formulation requires to create new variables (Key Frames) at the measurement frequency which quickly becomes intractable if the older states are not marginalized (windowed optimization). However, a mathematical trick enables to preintegrate consecutive measurements to create factors between distant (Lupton \cite{lupton2011visual}/Forster's \cite{forster2016manifold} preintegration).  
 
@@ -574,7 +635,7 @@ Adding measurements between 2 arbitrary timestamps \(t_i\) and \(t_j\) with \(\D
 \begin{split}
 \COM^{k} - \COM^{i} &= \sum_{j=i+1}^{k} \Big[ 
 \COMd^{j} \delta t 
-+ \dfrac{1}{2}\bfg \Delta t^2 + \frac{1}{2m} \Rot{}{}^{j} \sum_l \Rot{B}{L}(q^{j}) (\forcem{}{l}^{j} - \noise_f^{j})\Delta t^2 \Big]
++ \frac{1}{2}\bfg \Delta t^2 + \frac{1}{2m} \Rot{}{}^{j} \sum_l \Rot{B}{L}(q^{j}) (\forcem{}{l}^{j} - \noise_f^{j})\Delta t^2 \Big]
 \\
 \COMd^{k} - \COMd^{i} &= \sum_{j=i+1}^{k} \Big[ 
 \bfg + \frac{1}{m} \Rot{}{}^{j} \sum_l \Rot{B}{L}(q^{j}) (\forcem{}{l}^{j} - \noise_f^{j}) \Big] \delta t 
@@ -695,15 +756,15 @@ Finally, the same treatment is applied to the delta angular momentum equation.
 \begin{split}
 \Delta \AM_{ik} &\simeq
 \sum_{j=i+1}^{k} \Delta \Rotm{}{ij}(\Ident - [\phi_{ij}]_{\times}) \Big[ 
-\sum_l \Rot{B}{L}(q^{j-1}) (\torquem{}{l}^{j} - \noise_{\tau}^{j}) - (\forcem{}{l}^{j} - \noise_f^{j}) \times (\posi{B}{BL}(q^j) - \posim{B}{BC}^j + \bias_{p}^i + \noise_p^j)) \Big]  \Delta t
+\sum_l \Rot{B}{L}(q^{j-1}) (\torquem{}{l}^{j} - \noise_{\tau}^{j}) - (\forcem{}{l}^{j} - \noise_f^{j}) \times (\posi{B}{BL}(q^j) - \posim{B}{BC}^j + \bias_{p}^i + \noise_p^j)) \Big]  \delta t
 \\
 &= \Delta \AMm_{ik} -\sum_{j=i+1}^{k} \Delta \Rotm{}{ij}[\phi_{ij}]_{\times} \Big[ 
 \sum_l - \Rot{B}{L}(q^{j-1}) \noise_{\tau}^{j} - %%% add a second split?
-\forcem{}{l}^{j} \times \noise_p^j - (\posi{B}{BL}(q^j) - \posim{B}{BC}^j + \bias_{p}^i) \times \noise_f^{j} + \noise_f^{j} \times \noise_p^j) \Big]  \Delta t
+\forcem{}{l}^{j} \times \noise_p^j - (\posi{B}{BL}(q^j) - \posim{B}{BC}^j + \bias_{p}^i) \times \noise_f^{j} + \noise_f^{j} \times \noise_p^j) \Big]  \delta t
 \\
 % &\simeq \Delta \AMm_{ij} -\sum_{k=i}^{j-1} \Delta \Rotm{}{ik}[\phi_{ik}]_{\times} \Big[ 
 % \sum_l - \Rot{B}{L}(q^{k-1}) \noise_{\tau}^{k} -
-% \forcem{}{l}^{k} \times \noise_p^k - (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i) \times \noise_f^{k}) \Big]  \Delta t
+% \forcem{}{l}^{k} \times \noise_p^k - (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i) \times \noise_f^{k}) \Big]  dDelta t
 % \\
 &= \Delta \AMm_{ik} - \delta \AM_{ik}
 \end{split}
@@ -744,7 +805,7 @@ With this formulation, $\Delta \Rotm{}{}$ and $\Delta \AMm{}{}$ are respectively
     \Delta_{ij}(\bias) \simeq \Delta_{ij} \oplus J^{\Delta_{ij}}_{\bias} (\bias - \bar{\bias})
 \end{equation}
 
-This method has been well tested and proved to be efficient for IMU preintegration as accelerometer and angular velocity biases are slowly and rather continuously varying. This can be properly modelled as Brownian motion $\dot{\bias} = \noise_{\bias}$ which gives, integrating between $t_i$ and $t_k$: $\bias^j = \bias^i + \noise_{\bias}^d$ and can be added as a simple factor to the factor graph.
+This method has been well tested and proved to be efficient for IMU preintegration as accelerometer and angular velocity biases are slowly and rather continuously varying. This can be properly modeled as Brownian motion $\dot{\bias} = \noise_{\bias}$ which gives, integrating between $t_i$ and $t_k$: $\bias^j = \bias^i + \noise_{\bias}^d$ and can be added as a simple factor to the graph.
 
 However, this slow bias drift assumption is less clear to be viable. Indeed the bias does not drift with time but with the variation of the configuration of the robot. However, by definition almost, we do not have a model for this bias value and bias variation. One solution is to also model it as a Brownian motion. However, for the assumption to stay valid, two parameters need to be carefully monitored: the bias drift covariance and the duration between two keyframes. The first one, if improperly chosen, will either constrain the bias variation too much or let it vary to an extent that will lead to an overfitting to the data. As for the second, two frequent keyframes will lead to an a problem with two many variables but two few will render the constant bias assumption invalid. These parameters should be somehow tuned to the movements of the robot: the higher the gesticulation, the higher bias covariance and keyframe frequency should be but coming up with a empirical law for both seems hard. For IMUs the first parameter is tuned empirically by recording long streams of real sensor data and performing an Allan variance analysis.
 
@@ -760,7 +821,7 @@ Another interesting option would be to build a bias model $\bias_p = f(q)$ using
 \subsubsection{Incremental preintegration (using Solà's notation)}
 We can then derive a recursive algorithm to compute the delta measurements, covariance and related jacobians. It is best understood as a common procedure to the different preintegrable systems (IMU, vel odom, F/T sensors...) which steps can be appropriately abstracted as explained in \cite{atchuthan2018odometry}.  
 
-We recommend the present reader to consult this paper to understand the described pipeline, here we will just derive the corresponding terms with similar notations in order to explicit the comparison (in particular starting from III. D).
+We recommend the reader to consult this paper to have a complete picture the described pipeline, here we will just derive the corresponding terms with similar notations in order to explicit the comparison (in particular starting from III. D).
 
 At time $k$, measurements
 %
@@ -1093,7 +1154,7 @@ Multiplying by $\Rot{}{}^{i,T}$ and reordering the terms, we can finally define 
 \end{equation}
 
 
-\subsection{COM estimation random notes}
+\subsection{COM estimation misc notes}
 
 Instead of using the biased kinematic measurement $\posim{B}{BC}$, we can 
 
