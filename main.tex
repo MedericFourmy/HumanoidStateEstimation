@@ -1074,7 +1074,37 @@ However, unlike the preintegration strategy of subsection of 4.3.5, there is no 
 \begin{equation}
 \widetilde{\Delta}_{im}(b_i) = \Delta_{im}(x_i, x_j) \oplus  \noise_{\Delta} 
 \end{equation}
+with the given measurements. 
 
+If we make the reasonable hypothesis that one of the the limb is in stable contact with a surface during the preintegration period ($[\posi{}{\lambda}^k, \Rot{}{\lambda}^k ] = [\posi{}{\lambda}^i, \Rot{}{\lambda}^i ] \quad \forall k \in [i..m]$), then preintegration equations can be derived, as for instance for the COM vel:
+
+\begin{equation}
+	\begin{split}
+	\COMd^{k} &= \COMd^{i} + \bfg \Delta t_{ik} + \frac{1}{m} \sum_{j=i+1}^{k} \Rot{}{\lambda}^{j-1} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j} - \noise_f^{j}) \delta t
+	\\
+	&= \COMd^{i} + \bfg \Delta t_{ik} + \frac{1}{m} \Rot{}{\lambda}^{i} \sum_{j=i+1}^{k} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j} - \noise_f^{j}) \delta t
+	\end{split}
+\end{equation}
+and then preintegration is done relative to the frame associated to limb $\lambda$ at time $t_i$. This situation is very similar to integration with respect to the base frame as in section 4.3 except that since this frame is not rotating, we do not have to integrate $\Delta R$ measurements. We have then another $\Delta \COMd$ formulation:
+
+\begin{equation}
+	\begin{split}
+	\Delta \COMd_{ik} &= \Rot{}{\lambda}^{i,T}(\COMd^{k} - \COMd^{i} - \bfg \Delta t_{ik})
+	\\
+	&= \frac{1}{m} \sum_{j=i+1}^{k} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j} - \noise_f^{j}) \delta t
+	\end{split}
+\end{equation}
+
+Must work the same for COM position delta.
+%\begin{equation}
+%\begin{split}
+%\Delta \COM_{ik} &= \Rot{}{\lambda}^{i,T}(\COMd^{k} - \COMd^{i} - \bfg \Delta t_{ik})
+%\\
+%&= \frac{1}{m} \sum_{j=i+1}^{k} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j} - \noise_f^{j}) \delta t
+%\end{split}
+%\end{equation}
+
+However, due to the missing rotation matrix before the $(\posi{}{l}^{j-1} - \COM^{j-1})$ term in $\AM_c$ equation, this is unlikely to work for angular momentum.
 
 
 
