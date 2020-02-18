@@ -504,7 +504,14 @@ for $l \in 1..N$, with N number of force sensors and L the frame attached to thi
 In all equations, unless otherwise specified kinematic measurements (depending on $q$ and $\dot{q}$) are considered to be exact. We should consider adding them in the measurement vector in a second time to account for encoder noises or flexibilities.
 For lighter notation we will subsequently omit the measurement frame of references noting simply \(\forcem{}{l}\) and \(\torquem{}{l}\) for force and torque measurement values.
 
-By integrating measurements from $t_i$ to $t_j$, we wish to derive a factor constraining $\bfx_i$ and $\bfx_j$.
+When equations are discretized, the measurements recovered at time $t_k$ permit to deduce state at time $t_k$ given $t_{k-1}$. In this factor, we will consider uncertainties only on the N force torque sensors and bias + noise on the relative COM position measurement. The raw measurement vector for N limbs is therefore:
+
+\begin{equation}
+z_k = \left[\left[\forcem{}{l}^k, \torquem{}{l}^k \right]_{l \in [1..N}, \posim{}{BC}^k \right]
+\end{equation}
+%
+
+Incorporation of kinematic information is done through exact recovery of relative position and rotations using the articulary configuration of the robot $q_A$ and its kinematics model. In the discrete case, we simplify the notation using only the $k$ subscript, writing for instance $\posi{B}{BL}^k$ instead of $\posi{B}{BL}(q_A^k)$.
 
 \subsubsection{Factor formulation}
 Incorporating the measurements model in equation \ref{eq:NewtonEuler} and expressing it in the world frame \(W\), we derive the equations:
@@ -537,37 +544,35 @@ It can be reformulated as the state-space model equation on the COM related vari
 
 We now need to discretize this continuous system to define factors between successive times. We integrate \ref{eq:COMContinuous} between 2 consecutive measurements ($t_k$ and $t_{k+1}$ $\delta t = t_{k} - t_{k-1}$)  We use a simple first order approximation (forward Euler) which consists in assuming a zero order hold on measurements. We may also add a second order term for the com position since we have measurements on its acceleration.
 
-\begin{small}
 \begin{equation}
 \begin{split}
 \COM^{k} &= \COM^{k-1} + \COMd^{k-1} \delta t 
-+ \frac{1}{2} \bfg \delta t^2 + \frac{1}{2m} \Rot{}{}^{k-1} \sum_l \Rot{B}{L}(q^{k-1}) (\forcem{}{l}^{k-1} - \noise_f^{k-1}) \delta t^2
++ \frac{1}{2} \bfg \delta t^2 + \frac{1}{2m} \Rot{}{}^{k-1} \sum_l \Rot{B}{L}^{k} (\forcem{}{l}^{k} - \noise_f^{k}) \delta t^2
 \\
-\COMd^{k}&= \COMd^{k-1} + \bfg \delta t + \frac{1}{m} \Rot{}{}^{k-1} \sum_l \Rot{B}{L}(q^{k-1}) (\forcem{}{l}^{k-1} - \noise_f^{k-1}) \delta t 
+\COMd^{k}&= \COMd^{k-1} + \bfg \delta t + \frac{1}{m} \Rot{}{}^{k} \sum_l \Rot{B}{L}^{k} (\forcem{}{l}^{k} - \noise_f^{k}) \delta t 
 \\
 \AM_c^{k} &= \AM_c^{k-1} +  ( 
-\Rot{}{}^{k-1}\sum_l \Rot{B}{L}(q^{k-1})(\torquem{}{l}^{k-1} - \noise_{\tau}^{k-1}) + (\posi{B}{BL}(q^{k-1}) - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1} + \noise_p^{k-1}) \times \Rot{B}{L}(q^{k-1})(\forcem{}{l}^{k-1} - \noise_f^{k-1}) 
+\Rot{}{}^{k}\sum_l \Rot{B}{L}^{k}(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\posi{B}{BL}^{k} - \posim{B}{BC}^{k} + \bias_{p}^{k} + \noise_p^{k}) \times \Rot{B}{L}^{k}(\forcem{}{l}^{k} - \noise_f^{k}) 
 ) \delta t
 \end{split}
 \label{eq:COMDiscrete}
 \end{equation}
-\end{small}
 
 with discrete noise quantities distributed according to \( \mathcal{N}(O,\frac{Q}{\delta t}) \), \(Q\) being the corresponding continuous covariance.
 
 
 \subsubsection{Factor between successive measurements}
-Based on equations \ref{eq:COMDiscrete}, we can express the relationships as measurement functions $\bfy_{FT} = h_{FT}(\bfx) + \noise_{FT}$:
+Rearranging the terms of eq \ref{eq:COMDiscrete}, we can express the relationships as measurement functions $\bfy = h_{FT}(\bfx) + \noise_y$ with $\bfy$ and $\noise_{\bfy}$ depending only on bias term $\bfp$:
 
 \begin{small}
 \begin{equation}
 \begin{split}
-	\frac{1}{2m}\sum_l \Rot{B}{L}^{k-1} \forcem{}{l}^{k-1}\delta t^2 =& 
+	\frac{1}{2m}\sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k}\delta t^2 =& 
 	\Rot{}{}^{k-1,T}(\COM^{k} - \COM^{k-1} - \COMd^{k-1} \delta t - \frac{1}{2} \bfg \delta t^2)
-	+ \frac{1}{2m}\sum_l \Rot{B}{L}^{k-1} \noise_f^{k-1}\delta t^2
+	+ \frac{1}{2m}\sum_l \Rot{B}{L}^{k} \noise_f^{k}\delta t^2
 	\\
-	\frac{1}{m} \sum_l \Rot{B}{L}^{k-1} \forcem{}{l}^{k-1} \delta t =& \Rot{}{}^{k-1,T}(\COMd^{k} - \COMd^{k-1} - \bfg \delta t) 
-	+ \frac{1}{m} \sum_l \Rot{B}{L}^{k-1} \noise_f^{k-1} \delta t	
+	\frac{1}{m} \sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k} \delta t =& \Rot{}{}^{k-1,T}(\COMd^{k} - \COMd^{k-1} - \bfg \delta t) 
+	+ \frac{1}{m} \sum_l \Rot{B}{L}^{k} \noise_f^{k} \delta t	
 \end{split}
 \label{eq:CCdFactor}
 \end{equation}
@@ -576,10 +581,10 @@ Based on equations \ref{eq:COMDiscrete}, we can express the relationships as mea
 \begin{small}
 \begin{equation}
 \begin{split}
-	(\sum_l \Rot{B}{L}^{k-1}\torquem{}{l}^{k-1} + (\posi{B}{BL}^{k-1} - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1}) \times \Rot{B}{L}^{k-1}\forcem{}{l}^{k-1}) \delta t = 
+	(\sum_l \Rot{B}{L}^{k}\torquem{}{l}^{k} + (\posi{B}{BL}^{k} - \posim{B}{BC}^{k} + \bias_{p}^{k-1}) \times \Rot{B}{L}^{k}\forcem{}{l}^{k}) \delta t = 
 	\Rot{}{}^{k-1,T}(\AM_c^{k} - \AM_c^{k-1})
 	\\
-	+ (\sum_l \Rot{B}{L}^{k-1}\noise_{\tau}^{k-1} + (\posi{B}{BL}^{k-1} - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1})\times \Rot{B}{L}^{k-1}\noise_f^{k-1}  + \Rot{B}{L}^{k-1}\forcem{}{l}^{k-1}  \times \noise_p^{k-1} + \noise_p \times \noise_f)\delta t
+	+ (\sum_l \Rot{B}{L}^{k}\noise_{\tau}^{k} + (\posi{B}{BL}^{k} - \posim{B}{BC}^{k} + \bias_{p}^{k})\times \Rot{B}{L}^{k}\noise_f^{k}  + \Rot{B}{L}^{k}\forcem{}{l}^{k}  \times \noise_p^{k} + \noise^k_p \times \noise^k_f)\delta t
 \end{split}
 \label{eq:LcFactor}
 \end{equation}
@@ -608,18 +613,18 @@ h_{\AM}(\AM_c^{k}, \AM_c^{k-1}, \Rot{}{}^{k-1})
 \end{pmatrix}
 \end{equation}
 
-Then, to get the covariance matrix of $\noise_{FT}$, we have to recover the linear relation $\noise_{FT} = J^{\noise_{FT}}_{\noise_{ft}}$ from eqs \ref{eq:CCdFactor} and \ref{eq:LcFactor} with $\noise_{f} = (\noise_f, \noise_{\tau}, \noise_p)$.
+Then, to get the covariance matrix of $\noise_y$, we have to recover the linear relation $\noise_y = J^{\noise_y}_{\noise_z}$ from eqs \ref{eq:CCdFactor} and \ref{eq:LcFactor}.
 
-Neglecting the nonlinear term $\noise_p \times \noise_f$ in eq \ref{eq:LcFactor}, we get:
+Neglecting the nonlinear term $\noise_p \times \noise_f$ in eq \ref{eq:LcFactor}, we get (for N=2 limbs):
 
 \begin{equation}
-	J^{\noise_{FT}}_{\noise_{ft}} =
+	J^{\noise_y}_{\noise_z} =
 	\begin{pmatrix}
-	\frac{1}{2m}\sum_l \Rot{B}{L}^{k-1} \delta t^2 & 0 & 0
-	\\
-	\frac{1}{m}\sum_l \Rot{B}{L}^{k-1} \delta t & 0 & 0
-	\\
-	[\posi{B}{BL}^{k-1} - \posim{B}{BC}^{k-1} + \bias_{p}^{k-1}]_{\times} \Rot{B}{L}^{k-1} & \Rot{B}{L}^{k-1} & [\Rot{B}{L}^{k-1}\forcem{}{l}^{k-1}]_{\times}
+    \Rot{B}{L_1}^k \delta t^2/2m & 0 & \Rot{B}{L_2}^k \delta t^2/2m & 0 & 0 
+    \\
+    \Rot{B}{L_1}^k \delta t/m & 0 & \Rot{B}{L_2}^k \delta t/m & 0 & 0 
+    \\
+    \left[(\posim{B}{BL_1}^k - \posibar_{BC}^k) \right]_{\times} \Rot{B}{L_1}^k \delta t& \Rot{B}{L_1}^k \delta t& \left[(\posim{B}{BL_2}^k - \posibar_{BC}^k) \right]_{\times} \Rot{B}{L_2}^k \delta t & \Rot{B}{L_2}^k \delta t & \sum_l [\Rotm{B}{L}^k \forcem{}{l}^k]_{\times} \delta t
 	\end{pmatrix}
 \end{equation}
 
@@ -634,8 +639,8 @@ Adding measurements between 2 arbitrary timestamps \(t_i\) and \(t_j\) with \(\D
 \begin{equation}
 \begin{split}
 \COM^{k} - \COM^{i} &= \sum_{j=i+1}^{k} \Big[ 
-\COMd^{j} \delta t 
-+ \frac{1}{2}\bfg \Delta t^2 + \frac{1}{2m} \Rot{}{}^{j} \sum_l \Rot{B}{L}(q^{j}) (\forcem{}{l}^{j} - \noise_f^{j})\Delta t^2 \Big]
+\COMd^{j-1} \delta t 
++ \frac{1}{2}\bfg \Delta t^2 + \frac{1}{2m} \Rot{}{}^{j-1} \sum_l \Rot{B}{L}(q^{j}) (\forcem{}{l}^{j} - \noise_f^{j})\Delta t^2 \Big]
 \\
 \COMd^{k} - \COMd^{i} &= \sum_{j=i+1}^{k} \Big[ 
 \bfg + \frac{1}{m} \Rot{}{}^{j} \sum_l \Rot{B}{L}(q^{j}) (\forcem{}{l}^{j} - \noise_f^{j}) \Big] \delta t 
@@ -763,7 +768,7 @@ Finally, the same treatment is applied to the delta angular momentum equation.
 \forcem{}{l}^{j} \times \noise_p^j - (\posi{B}{BL}(q^j) - \posim{B}{BC}^j + \bias_{p}^i) \times \noise_f^{j} + \noise_f^{j} \times \noise_p^j) \Big]  \delta t
 \\
 % &\simeq \Delta \AMm_{ij} -\sum_{k=i}^{j-1} \Delta \Rotm{}{ik}[\phi_{ik}]_{\times} \Big[ 
-% \sum_l - \Rot{B}{L}(q^{k-1}) \noise_{\tau}^{k} -
+% \sum_l - \Rot{B}{L}^{k-1} \noise_{\tau}^{k} -
 % \forcem{}{l}^{k} \times \noise_p^k - (\posi{B}{BL}(q^k) - \posim{B}{BC}^k + \bias_{p}^i) \times \noise_f^{k}) \Big]  dDelta t
 % \\
 &= \Delta \AMm_{ik} - \delta \AM_{ik}
@@ -826,7 +831,7 @@ We recommend the reader to consult this paper to have a complete picture the des
 At time $k$, measurements
 %
 \begin{equation}
-    y_k = \left[\left[\forcem{}{l}^k, \torquem{}{l}^k \right]_{l \in [1..L]}, \posim{}{BC}^k, \angvelm{}{}^k\right]
+    z_k = \left[\left[\forcem{}{l}^k, \torquem{}{l}^k \right]_{l \in [1..L]}, \posim{}{BC}^k, \angvelm{}{}^k\right]
 \end{equation}
 %
 are integrated by the system. We associate to the vector quantity a covariance matrix based on the discretized covariance noises of each sensor: $Q_{y} \in \Reals^{(2L+6) \times (2L+6)}$.
@@ -834,7 +839,7 @@ are integrated by the system. We associate to the vector quantity a covariance m
 Current bias estimates at preintegration time $\bar{\bias_p}$ and $\bar{\bias_{\omega}}$ are used to recover unbias estimates of COM relative position and body angular velocity $\posibar_{BC} = \posim{}{BC} - \bar{\bias_p}$ and $\angvelbar_{BC} = \angvelm{}{} - \bar{\bias_{\omega}}$. Let's define $\bias = \left[\bias_p, \bias_{\omega} \right]$ the bias vector. $\bar{\bias}$ will denote the bias estimates at preintegration time. We call the unbiased measurement vector "body magnitudes":
 
 \begin{equation}
-    b_k = f(y_k, \bias_k) = \left[\left[  \forcem{}{l}^k, \torquem{}{l}^k \right]_{l \in [1..L]}, \posibar_{BC}^k, \angvelbar^k \right]
+    b_k = f(z_k, \bias_k) = \left[\left[  \forcem{}{l}^k, \torquem{}{l}^k \right]_{l \in [1..L]}, \posibar_{BC}^k, \angvelbar^k \right]
 \end{equation}
 
 Then, we define the delta quantity:
@@ -865,23 +870,45 @@ and the proper delta $\delta_{jk}$ resulting from the integration of measurement
     \delta_{jk} =
     f(b_k, \delta t) =
     \begin{pmatrix}
-    \frac{1}{2m} \sum_l \Rot{B}{L}(q^{k}) \forcem{}{l}^{k} \Delta t^2
+    \frac{1}{2m} \sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k} \Delta t^2
     \\
-    \frac{1}{m} \sum_l \Rot{B}{L}(q^{k}) \forcem{}{l}^{k} \delta t 
+    \frac{1}{m} \sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k} \delta t 
     \\
-    \sum_l \Rot{B}{L}(q^{k}) (\torquem{}{l}^{k} - \forcem{}{l}^{k} \times (\posi{B}{BL}(q^k) - \posibar_{BC}^k))
+    \sum_l \Rot{B}{L}^{k} (\torquem{}{l}^{k} - \forcem{}{l}^{k} \times (\posi{B}{BL}(q^k) - \posibar_{BC}^k))
     \\
     Exp(\angvelbar^k\delta t)
     \end{pmatrix}
 \end{equation}
 
-One important thing to consider is that the delta $\Delta$ define a group under the $.$ inner composition law defined by equation \ref{eq:DeltaDTCompo}. The identity element is therefore $\Delta_0 = \left[ (0,0,0), (0,0,0), (0,0,0), \Ident_3 \right]$.
+One important thing to consider is that the delta $\Delta$ define a group under the $.$ inner composition law defined by equation \ref{eq:DeltaDTCompo}. The identity element is therefore $\Delta_0 = \left[ (0,0,0), (0,0,0), (0,0,0), \Ident_3 \right]$ and its inverse can be derived writing $\Delta \Delta^{-1} = \Delta_0$:
+
+\begin{equation}
+	\Delta^{-1} =
+	\begin{pmatrix}
+	 - \Delta \Rot{}{}^T (\Delta\COM - \Delta\COMd \delta t)
+	 \\
+	 - \Delta \Rot{}{}^T \Delta \COMd
+	 \\
+	 - \Delta \Rot{}{}^T \Delta\AM
+	 \\
+	 \Delta \Rot{}{}^T
+	\end{pmatrix}
+\end{equation}
+with the minus term inside the parenthesis in the $\Delta\COM$ line is due to the fact that time is also reversed ($\delta t$).
+
+The "between" operation is also useful in some instances, the "between" delta being defined as $\Delta_b$ so that $\Delta_2 = \Delta_1 \Delta_b$, that is to stay $\Delta_b = \Delta^{-1)}_1 \Delta_2$:
+
+\begin{equation}
+	\begin{pmatrix}
+	
+	\end{pmatrix}
+\end{equation}
 
 \paragraph{Jacobians of pipeline functions}
 Let's derive the jacobians for the operations we just described:
 
 \begin{equation}
-    J^{b_k}_{y_k} = \Ident_{(2L+6)\times (2L+6)}
+    J^{b_k}_{z_k} = \Ident_{(2L+6)\times (2L+6)}
     ~~~~~
     J^{b_k}_{\bias_k} =
     \begin{pmatrix}
@@ -911,22 +938,22 @@ written for L=2 to simplify notations.
 \begin{equation}
     J^{\Delta_3}_{\Delta_1} =
     \begin{pmatrix}
-    \Ident & \Ident \delta t & 0 & - \Delta \Rotm{}{1} \left[\Delta \COM_2 \right]_{\times}
+    \Ident & \Ident \delta t & 0 & - \Delta \Rot{}{1} \left[\Delta \COM_2 \right]_{\times}
     \\
-    0 & \Ident & 0 & - \Delta \Rotm{}{1} \left[\Delta \COMd_2 \right]_{\times}
+    0 & \Ident & 0 & - \Delta \Rot{}{1} \left[\Delta \COMd_2 \right]_{\times}
     \\
-    0 & 0 & \Ident & - \Delta \Rotm{}{1} \left[\Delta \AM_2 \right]_{\times}
+    0 & 0 & \Ident & - \Delta \Rot{}{1} \left[\Delta \AM_2 \right]_{\times}
     \\
-    0 & 0 & 0 & \Delta \Rotm{}{2}^T
+    0 & 0 & 0 & \Delta \Rot{}{2}^T
     \end{pmatrix}
     ~~~~~
     J^{\Delta_3}_{\Delta_2} =
     \begin{pmatrix}
-    \Delta R_1 & 0 & 0 & 0
+    \Delta \Rot{}{1} & 0 & 0 & 0
     \\
-    0 & \Delta R_1 & 0 & 0
+    0 & \Delta \Rot{}{1} & 0 & 0
     \\
-    0 & 0 & \Delta R_1 & 0
+    0 & 0 & \Delta \Rot{}{1} & 0
     \\
     0 & 0 & 0 & \Ident
     \end{pmatrix}
@@ -936,7 +963,7 @@ written for L=2 to simplify notations.
 Then covariance propagation is done recursively by writing 
 
 \begin{equation}
-    Q_{ii} = 0_{12\times 12} ~~~~~~ Q_{ik} = J^{\Delta_{ik}}_{\Delta {ij}} Q_{ij} J^{\Delta_{ik},T}_{\Delta {ij}} + J^{\Delta_{ik},T}_{y_k} Q_y J^{\Delta_{ik},T}_{y_k}  ~~~~~~ J^{\Delta_{ik}}_{y_k} = J^{\Delta_{ik}}_{\delta_{jk}} J^{\delta_{jk}}_{b_k} J^{b_k}_{y_k}
+    Q_{ii} = 0_{12\times 12} ~~~~~~ Q_{ik} = J^{\Delta_{ik}}_{\Delta {ij}} Q_{ij} J^{\Delta_{ik},T}_{\Delta {ij}} + J^{\Delta_{ik},T}_{z_k} Q_y J^{\Delta_{ik},T}_{z_k}  ~~~~~~ J^{\Delta_{ik}}_{z_k} = J^{\Delta_{ik}}_{\delta_{jk}} J^{\delta_{jk}}_{b_k} J^{b_k}_{z_k}
 \end{equation}
 
 The bias correction jacobian is also recovered in a recursive manner:
@@ -944,6 +971,113 @@ The bias correction jacobian is also recovered in a recursive manner:
 \begin{equation}
     J^{\Delta_{ii}}_{\bias^i} = 0 ~~~~~~  J^{\Delta_{ik}}_{\bias^i} = J^{\Delta_{ik}}_{\Delta_{ij}} J^{\Delta_{ij}}_{\bias^k} + J^{\Delta_{ik}}_{\delta_{jk}} J^{\delta_{jk}}_{\bias^k}
 \end{equation}
+
+
+
+
+
+
+
+
+
+
+\subsection{Force/torque sensors factor with end effectors as random variables}
+Here we will consider he possibility of adding end effector poses the the problem in order to remove kinematic measurements from the Force/Torque factor. Our state vector is therefore now:
+
+\begin{equation*}
+\bfx = \left[\posi{W}{WB}, \vel{W}{WB}, \Rot{W}{B}, \posi{W}{WC}, \vel{W}{WC}, \prescript{W}{}{\AM}_{c}, \left[\posi{W}{WL}, \Rot{W}{L}\right]_{l \in [1..N]} \right] 
+\triangleq 
+[\bfp, \bfv, \Rot{}{}, \COM, \COMd, \AM_c, \left[\posi{}{L}, \Rot{}{L}\right]_{l \in [1..N]} ] 
+\end{equation*}
+
+The measurements to consider for this factor should therefore only be at time $t_k$:
+
+\begin{equation}
+z_k = \left[\left[\forcem{}{l}^k, \torquem{}{l}^k \right]_{l \in [1..N} \right]
+\end{equation}
+
+
+\subsubsection{Factor formulation}
+Rewriting the Newton-Euler equation integration with Euler scheme \ref{eq:COMDiscrete} with the new state variables and measurements, we have:
+
+\begin{equation}
+\begin{split}
+\COM^{k} &= \COM^{k-1} + \COMd^{k-1} \delta t 
++ \frac{1}{2} \bfg \delta t^2 + \frac{1}{2m} \sum_l \Rot{}{L}^{k-1} (\forcem{}{l}^{k} - \noise_f^{k}) \delta t^2
+\\
+\COMd^{k}&= \COMd^{k-1} + \bfg \delta t + \frac{1}{m} \sum_l \Rot{}{L}^{k-1} (\forcem{}{l}^{k} - \noise_f^{k}) \delta t 
+\\
+\AM_c^{k} &= \AM_c^{k-1} +  [ 
+\sum_l \Rot{}{L}^{k-1}(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\posi{}{l}^{k-1} - \COM^{k-1}) \times \Rot{}{L}^{k}(\forcem{}{l}^{k} - \noise_f^{k}) 
+] \delta t
+\end{split}
+\label{eq:COMDiscreteFeet}
+\end{equation}
+
+Then we can define an error random variable:
+
+\begin{equation}
+	\bfe =
+	\begin{pmatrix}
+	\COM^k - f_{\COM}(\COM^{k-1}, \COMd^{k-1}, [\Rot{}{L}^{k-1}, \forcem{}{l}^k, \noise_f^k]_{l \in [1..N]})
+	\\
+	\COMd^k - f_{\COMd}(\COMd^{k-1} [\Rot{}{L}^{k-1}, \forcem{}{l}^k, \noise_f^k]_{l \in [1..N]})
+	\\
+	\AM_c^k - f_{\AM_c}(\AM_c^{k-1}, [\posi{}{L}^{k-1} \Rot{}{L}^{k-1}, \forcem{}{l}^k, \torquem{}{l}^k, \noise_f^k, \noise_{\tau}^k]_{l \in [1..N]})	
+	\end{pmatrix}
+\end{equation}
+using the previous equation.
+
+We can approximate this random variable as a gaussian $e \sim \Gaussian{0}{Q_e}$ by linearization: $Q_e = J^e_{n_z} Q_{n_z} J^{e,T}_{n_z}$ with $J^e_{n_z} \in \Reals^{9 \times 6N}$.
+
+The jacobian with respect to noise variables is then:
+
+\begin{equation}
+	J^e_{n_z}=
+	\left(
+	\begin{pmatrix}
+	\Rot{}{l}^{k-1} \delta t^2/2m & 0
+	\\
+	\Rot{}{l}^{k-1} \delta t/m & 0
+	\\
+	[\posi{}{l}^{k-1} - \COM^{k-1}]_{\times} \Rot{}{l}^{k-1} & \Rot{}{l}^{k-1}
+	\end{pmatrix}
+	\right)_{l \in [1..N]}
+\end{equation}
+
+
+\subsubsection{Preintegration factor formulation}
+
+We will follow the same steps as Forster's preintegration, that is to say, sum over the measurement from $t_i$ to $t_{k-1}$. We have then:
+
+
+
+
+
+\begin{equation}
+\begin{split}
+	\COM^{k} &= \COM^{i} + \sum_{j=i+1}^{k}\COMd^{j-1} \delta t 
+	+ \frac{1}{2} \bfg \delta t^2 + \frac{1}{2m} \sum_l \Rot{}{L}^{j-1} (\forcem{}{l}^{j} - \noise_f^{j}) \delta t^2
+	\\
+	\COMd^{k}&= \COMd^{i} + \bfg \Delta t_{ik} + \frac{1}{m}  \sum_{j=i+1}^{k} \sum_l \Rot{}{L}^{j-1} (\forcem{}{l}^{j} - \noise_f^{j}) \delta t 
+	\\
+	\AM_c^{k} &= \AM_c^{i} +  \sum_{j=i+1}^{k} \left[ 
+	\sum_l \Rot{}{L}^{j-1}(\torquem{}{l}^{j} - \noise_{\tau}^{j}) + (\posi{}{l}^{j-1} - \COM^{j-1}) \times \Rot{}{L}^{j}(\forcem{}{l}^{j} - \noise_f^{j}) 
+	\right] \delta t
+\end{split}
+\label{eq:COMDiscreteFeet}
+\end{equation}
+
+
+However, unlike the preintegration strategy of subsection of 4.3.5, there is no obvious way to reorder the equations to have a equation of the type
+
+\begin{equation}
+\widetilde{\Delta}_{im}(b_i) = \Delta_{im}(x_i, x_j) \oplus  \noise_{\Delta} 
+\end{equation}
+
+
+
+
 
 
 
@@ -1171,8 +1305,8 @@ First order discretization of \ref{eq:AMContinuousRandomNotes} gives:
 \begin{equation}
 \begin{split}
 \AM_c^{k+1} &= \AM_c^{k} +  ( 
-\sum_l \Rot{}{}^{k}\Rot{B}{L}(q^{k})(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\bfp^{k-1} +
-\Rot{}{}^{k}\posi{B}{BL}(q^{k}) - \COM^{k})) \times \Rot{}{}^{k}\Rot{B}{L}(q^{k})(\forcem{}{l}^{k} - \noise_f^{k}) 
+\sum_l \Rot{}{}^{k}\Rot{B}{L}^{k}(\torquem{}{l}^{k} - \noise_{\tau}^{k}) + (\bfp^{k-1} +
+\Rot{}{}^{k}\posi{B}{BL}^{k} - \COM^{k})) \times \Rot{}{}^{k}\Rot{B}{L}^{k}(\forcem{}{l}^{k} - \noise_f^{k}) 
 ) \Delta t
 \end{split}
 \end{equation}
@@ -1184,7 +1318,7 @@ Adding measurements between 2 arbitrary timestamps \(t_i\) and \(t_j\) with \(\D
 \begin{equation}
 \begin{split}
 \AM_c^{j} - \AM_c^{i} &=  \sum_{k=i}^{j-1} \Big[ 
-\sum_l \Rot{B}{L}(q^{k-1}) (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\bfp^{k} + \Rot{}{}^{k}\posi{B}{BL}(q^{k}) - \COM^{k})) \Big]  \Delta t
+\sum_l \Rot{B}{L}^{k-1} (\torquem{}{l}^{k} - \noise_{\tau}^{k} - (\forcem{}{l}^{k} - \noise_f^{k}) \times (\bfp^{k} + \Rot{}{}^{k}\posi{B}{BL}^{k} - \COM^{k})) \Big]  \Delta t
 \end{split}
 \end{equation}
 
