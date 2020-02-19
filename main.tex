@@ -1026,9 +1026,9 @@ Then we can define an error random variable:
 	\AM_c^k - f_{\AM_c}(\AM_c^{k-1}, [\posi{}{L}^{k-1} \Rot{}{L}^{k-1}, \forcem{}{l}^k, \torquem{}{l}^k, \noise_f^k, \noise_{\tau}^k]_{l \in [1..N]})	
 	\end{pmatrix}
 \end{equation}
-using the previous equation.
+using the RHS of the previous equation to define $f_{\COM},f_{\COMd},f_{\AM_c}$.
 
-We can approximate this random variable as a gaussian $e \sim \Gaussian{0}{Q_e}$ by linearization: $Q_e = J^e_{n_z} Q_{n_z} J^{e,T}_{n_z}$ with $J^e_{n_z} \in \Reals^{9 \times 6N}$.
+We can approximate this random variable as a Gaussian $e \sim \Gaussian{0}{Q_e}$ by linearization: $Q_e = J^e_{n_z} Q_{n_z} J^{e,T}_{n_z}$ with $J^e_{n_z} \in \Reals^{9 \times 6N}$.
 
 The jacobian with respect to noise variables is then:
 
@@ -1082,7 +1082,7 @@ If we make the reasonable hypothesis that one of the the limb is in stable conta
 	\begin{split}
 	\COMd^{k} &= \COMd^{i} + \bfg \Delta t_{ik} + \frac{1}{m} \sum_{j=i+1}^{k} \Rot{}{\lambda}^{j-1} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j} - \noise_f^{j}) \delta t
 	\\
-	&= \COMd^{i} + \bfg \Delta t_{ik} + \frac{1}{m} \Rot{}{\lambda}^{i} \sum_{j=i+1}^{k} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j} - \noise_f^{j}) \delta t
+	&= \COMd^{i} + \bfg \Delta t_{ik} + \frac{1}{m} \Rot{}{\lambda}^{i} \sum_{j=i+1}^{k} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j-1} - \noise_f^{j}) \delta t
 	\end{split}
 \end{equation}
 and then preintegration is done relative to the frame associated to limb $\lambda$ at time $t_i$. This situation is very similar to integration with respect to the base frame as in section 4.3 except that since this frame is not rotating, we do not have to integrate $\Delta R$ measurements. We have then another $\Delta \COMd$ formulation:
@@ -1095,17 +1095,28 @@ and then preintegration is done relative to the frame associated to limb $\lambd
 	\end{split}
 \end{equation}
 
-Must work the same for COM position delta.
-%\begin{equation}
-%\begin{split}
-%\Delta \COM_{ik} &= \Rot{}{\lambda}^{i,T}(\COMd^{k} - \COMd^{i} - \bfg \Delta t_{ik})
-%\\
-%&= \frac{1}{m} \sum_{j=i+1}^{k} \sum_l \Rot{\lambda}{L}^{j-1}(q^j) (\forcem{}{l}^{j} - \noise_f^{j}) \delta t
-%\end{split}
-%\end{equation}
+Rearranging the terms and injecting the newfound COM velocity delta in the equations, we derive a new COM position delta:
+
+
+\begin{equation}
+\begin{split}
+\Delta \COM_{ik} &= \Rot{}{\lambda}^{i,T}(\COM^{k} - \COM^{i} - \COMd^{i}\Delta t_{ik} - \frac{1}{2} \bfg \Delta t_{ik}^2)
+\\
+&=  \sum_{j=i+1}^{k} \Delta \COMd_{ik} \delta t + \frac{1}{2m}\sum_l \Rot{\lambda}{L}^{j-1}(q^j) \frac{1}{2m}(\forcem{}{l}^{j} - \noise_f^{j}) \delta t^2
+\end{split}
+\end{equation}
 
 However, due to the missing rotation matrix before the $(\posi{}{l}^{j-1} - \COM^{j-1})$ term in $\AM_c$ equation, this is unlikely to work for angular momentum.
+In fact, when rewriting the sum from i to k equation and making the initial $\Rot{}{\lambda}^i$ appear, we have:
 
+\begin{equation}
+	\begin{split}
+	\AM_c^{k} &= \AM_c^{i} +  \sum_{j=i+1}^{k} \left[ 
+	\sum_l \Rot{}{\lambda}^{i} \Rot{\lambda}{L}^{j-1} (\torquem{}{l}^{j} - \noise_{\tau}^{j}) + (\posi{}{l}^{j-1} - \COM^{j-1}) \times \Rot{}{\lambda}^{i} \Rot{\lambda}{L}^{j-1} (\forcem{}{l}^{j} - \noise_f^{j}) 
+	\right] \delta t
+	\end{split}
+\end{equation}
+we see that the lever term lacks this initial rotation (even after replacing $\COM^{j-1}$ using its delta definition). 
 
 
 
@@ -1282,7 +1293,7 @@ The position delta requires more calculations. First, inject equation \ref{eq:IM
 \Rot{}{}^i\sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \\
 &= \vel{}{}^i \Delta t_{ij} + 
-\grav \sum_{k=i}^{j-1}dt (\Delta t_{ik} + \frac{1}{2}dt^2) +
+\grav \sum_{k=i}^{j-1} (\Delta t_{ik} dt + \frac{1}{2}dt^2) +
 \Rot{}{}^i\sum_{k=i}^{j-1} \Big[\Delta v_{ik}dt +  \frac{1}{2} \Delta R_{ik} (\accm{}{}^k - \bias_{\acc{}{}^k} - \noise_{\acc{}{}^k})dt^2 \Big]
 \end{split}
 \end{equation}
@@ -1300,7 +1311,7 @@ we can deduce that:
 \mathcal{G}t_{ij} 
 &= dt \sum_{k=i}^{j-1}(\Delta t_{ik} + \frac{1}{2}dt) = dt \sum_{k=i}^{j-1}((k -i)dt + \frac{1}{2}dt)
 \\
-&= dt \Big[ \sum_{k=i}^{j-1} k dt - i(j-i)dt + \frac{1}{2}\Delta t_{ij}  \Big] 
+&= dt \Big[ \sum_{k=i}^{j-1} [ k dt - i(j-i)dt ] + \frac{1}{2}\Delta t_{ij}  \Big] 
 \\
 &= dt \Big[ \frac{dt}{2} (j(j-1) - i(i-1) - 2i(j-1)) + \frac{1}{2}\Delta t_{ij} \Big] 
 \\
