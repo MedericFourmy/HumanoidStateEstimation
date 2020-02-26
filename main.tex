@@ -62,6 +62,13 @@
 \newcommand{\Reals}{\mathbb{R}}
 
 
+\font\Bigmath=cmsy10 scaled \magstep2
+\font\bigmath=cmsy10 scaled \magstep1
+\def\diamondplus{\mathrel{%
+		\ooalign{$+$\cr\hss\lower.255ex\hbox{\Bigmath\char5}\hss}}}
+\def\diamondminus{\mathrel{%
+		\ooalign{$-$\cr\hss\lower.255ex\hbox{\Bigmath\char5}\hss}}}
+
 %%%%%%%%%%%%%%%%%%%
 
 \usepackage{customCommands} % Joan Sola's macros
@@ -592,7 +599,6 @@ Then eqs \ref{eq:COMDiscrete} write:
 \end{equation}
 \end{small}
 
-We will first derive equations without noisy measurements and then, with them.
 
 \subsubsection{Factor between successive measurements}
 Rearranging the terms of eq \ref{eq:COMDiscrete}, we can express the relationships as measurement functions $\bfy = h_{FT}(\bfx) + \noise_y$ with $\bfy$ and $\noise_{\bfy}$ depending only on bias term $\bfp$:
@@ -662,6 +668,31 @@ Neglecting the nonlinear term $\noise_p \times \noise_f$ in eq \ref{eq:LcFactor}
 \end{equation}
 
 Then $Q_{\noise_{FT}} = J^{\noise_{FT}}_{\noise_{ft}} Q_{\noise_{ft}} J^{\noise_{FT},T}_{\noise_{ft}}$. Note that the jacobian depends on the bias variable and that therefore the covariance should be recomputed at each new solve of the problem.
+
+Even though Wolf makes use of automatic differentiation (Jet.h), writing the error function $\bfe_{FT} = \bfy_{FT}-h_{FT}(\bfX)$ Jacobian with respect to the states may give us insights about the behavior of the optimization.
+
+Here: $\bfX = [\COM^k, \COM^{k-1}, \COMd^{k}, \COMd^{k-1}, \Rot{}{}^{k-1}, \AM_c^k, \AM_c^{k-1}, \bias_p^{k-1}]$.
+
+\begin{small}
+\begin{equation}
+J^{e_{FT}}_{\bfX} =
+\begin{pmatrix}
+-\Rot{}{}^{k-1,T} & \Rot{}{}^{k-1,T} & 0 & \Rot{}{}^{k-1,T}\delta t & \Rot{}{}^{k-1,T}[\COM^k - \COM^{k-1} - \COMd^{k-1}\delta t - \bfg \delta t^2 /2]_{\times}\Rot{}{}^{k-1} & 0 & 0 & 0
+\\
+0 & 0 & -\Rot{}{}^{k-1,T} & \Rot{}{}^{k-1,T} & \Rot{}{}^{k-1,T}[\COMd^k - \COMd^{k-1} - \bfg \delta t]_{\times}\Rot{}{}^{k-1} & 0 & 0 & 0
+\\
+0 & 0 & 0 & 0 & \Rot{}{}^{k-1,T}[\AM^k - \AM^{k-1}]_{\times}\Rot{}{}^{k-1} & - \Rot{}{}^{k-1,T} & \Rot{}{}^{k-1,T} & - \left[ \Rot{B}{L}^{k} \forcem{}{l} \right]
+\end{pmatrix}
+\end{equation}
+\end{small}
+
+where the rotation column makes use of the fact that:
+
+\begin{equation}
+	\frac{\partial \Rot{}{}^T v}{\partial \Rot{}{}} = 
+	\frac{\partial \Rot{}{}^T v}{\partial \Rot{}{}^T} \frac{\partial \Rot{}{}^T}{\partial \Rot{}{}} =
+	\Rot{}{}^T [v]_{\times} \Rot{}{}
+\end{equation}
 
 However this formulation requires to create new variables (Key Frames) at the measurement frequency which quickly becomes intractable if the older states are not marginalized (windowed optimization). However, a mathematical trick enables to preintegrate consecutive measurements to create factors between distant (Lupton \cite{lupton2011visual}/Forster's \cite{forster2016manifold} preintegration).  
 
@@ -820,7 +851,7 @@ The measurement model of delta quantities is therefore:
 
 \begin{equation}
 \begin{split}
-\Delta \COMm_{ik}  &= \Rot{}{}^{i,T} (\COM^k - \COM^i - \vel{}{}^i \Delta t_{ik} - \frac{1}{2}\grav \Delta t_{ik}^2) + \delta \COM_{ik} 
+\Delta \COMm_{ik}  &= \Rot{}{}^{i,T} (\COM^k - \COM^i - \COMd{}{}^i \Delta t_{ik} - \frac{1}{2}\grav \Delta t_{ik}^2) + \delta \COM_{ik} 
 \\
 \Delta \COMdm_{ik} &= \Rot{}{}^{i,T} (\COMd^{k} - \COMd^{i} - \bfg \Delta t_{ik}) + \delta \COMd_{ik}
 \\
@@ -864,7 +895,7 @@ We recommend the reader to consult this paper to have a complete picture the des
 At time $k$, measurements
 %
 \begin{equation}
-z_k = \left[ \left[\forcem{}{l}^k \right]_{l \in [1..N}, \left[\torquem{}{l}^k \right]_{l \in [1..N}, \posim{}{BC}^k, \angvelm{}{}^k \right]
+z_k = \left[ \left[\forcem{}{l}^k \right]_{l \in [1..N}, \left[\torquem{}{l}^k \right]_{l \in [1..N}, \posim{}{BC}^k, \angvelm{}{}^k, \left[\posim{B}{BL}^k \right]_{l \in [1..N}, \left[\Rotm{B}{L}^k \right]_{l \in [1..N}\right]
 \end{equation}
 %
 are integrated by the system. We associate to the vector quantity a covariance matrix based on the discretized covariance noises of each sensor: $Q_{z} \in \Reals^{(2N+6) \times (2N+6)}$.
@@ -872,7 +903,7 @@ are integrated by the system. We associate to the vector quantity a covariance m
 Current bias estimates at preintegration time $\bar{\bias_p}$ and $\bar{\bias_{\omega}}$ are used to recover unbias estimates of COM relative position and body angular velocity $\posibar_{BC} = \posim{}{BC} - \bar{\bias_p}$ and $\angvelbar_{BC} = \angvelm{}{} - \bar{\bias_{\omega}}$. Let's define $\bias = \left[\bias_p, \bias_{\omega} \right]$ the bias vector. $\bar{\bias}$ will denote the bias estimates at preintegration time. We call the unbiased measurement vector "body magnitudes":
 
 \begin{equation}
-    b_k = f(z_k, \bias_k) = \left[ \left[\forcem{}{l}^k \right]_{l \in [1..N}, \left[\torquem{}{l}^k \right]_{l \in [1..N}, \posibar_{BC}^k, \angvelbar^k \right]
+    b_k = f(z_k, \bias_k) = \left[ \left[\forcem{}{l}^k \right]_{l \in [1..N}, \left[\torquem{}{l}^k \right]_{l \in [1..N}, \posibar_{BC}^k, \angvelbar{}{}^k, \left[\posim{B}{BL}^k \right]_{l \in [1..N}, \left[\Rotm{B}{L}^k \right]_{l \in [1..N}\right]
 \end{equation}
 
 Then, we define the delta quantity:
@@ -903,11 +934,11 @@ and the proper delta $\delta_{jk}$ resulting from the integration of measurement
     \delta_{jk} =
     f(b_k, \delta t) =
     \begin{pmatrix}
-    \frac{1}{2m} \sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k} \Delta t^2
+    \frac{1}{2m} \sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k} \delta t^2
     \\
     \frac{1}{m} \sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k} \delta t 
     \\
-    \sum_l \Rot{B}{L}^{k} (\torquem{}{l}^{k} - \forcem{}{l}^{k} \times (\posi{B}{BL}(q^k) - \posibar_{BC}^k))
+    \sum_l \Rot{B}{L}^{k} \torquem{}{l}^{k} +  (\posi{B}{BL}(q^k) - \posibar_{BC}^k) \times \forcem{}{l}^{k})
     \\
     Exp(\angvelbar^k\delta t)
     \end{pmatrix}
@@ -918,7 +949,7 @@ One important thing to consider is that the delta $\Delta$ define a group under 
 \begin{equation}
 	\Delta^{-1} =
 	\begin{pmatrix}
-	 - \Delta \Rot{}{}^T (\Delta\COM - \Delta\COMd \delta t)
+	 - \Delta \Rot{}{}^T (\Delta\COM - \Delta\COMd \Delta t)
 	 \\
 	 - \Delta \Rot{}{}^T \Delta \COMd
 	 \\
@@ -929,29 +960,94 @@ One important thing to consider is that the delta $\Delta$ define a group under 
 \end{equation}
 with the minus term inside the parenthesis in the $\Delta\COM$ line is due to the fact that time is also reversed ($\delta t$).
 
-The "between" operation is also useful in some instances, the "between" delta being defined as $\Delta_b$ so that $\Delta_2 = \Delta_1 \Delta_b$, that is to stay $\Delta_b = \Delta^{-1)}_1 \Delta_2$:
+The "between" operation is also useful in some instances, the "between" delta being defined as $\Delta_b$ so that $\Delta_2 = \Delta_1 \Delta_b$, that is to stay $\Delta_b = \Delta^{-1}_1 \Delta_2$:
 
 \begin{equation}
+\Delta b = 
 	\begin{pmatrix}
-	
+	\Delta \Rot{}{1}^T(\Delta \COM_2 - \Delta \COM_1) + \Rot{}{1}^T \Delta \COM_1 (\Delta t_1 - \Delta t_2)
+	\\
+	\Delta \Rot{}{1}^T(\Delta \COMd_2 - \Delta \COMd_1)
+	\\
+	\Delta \Rot{}{1}^T(\Delta \AM_2 - \Delta \AM_1)
+	\\
+	\Delta \Rot{}{1}^T \Delta \Rot{}{2}
+	\end{pmatrix}
+\end{equation}
+with $dt = \Delta t_2 - \Delta t_1$ symbol used in the implementation.
+
+Propagation of a state vector $\bfx = [\COM, \COM, \AM, \Rot{}{}]$ using delta quantities is done by defining the $\boxplus$ operation as:
+
+\begin{equation}
+	\bfx^j = \bfx^i \boxplus \Delta_{ij} =
+	\begin{pmatrix}
+	\COM^i + \COMd_i \Delta t_{ij} + \frac{1}{2} g \Delta t_{ij}^2 + \Rot{}{}^i \Delta \COM_{ij}
+	\\
+	\COMd^i + g \Delta t_{ij} + \Rot{}{}^i \Delta \COMd_{ij}
+	\\
+	\AM^i + \Rot{}{}^i \Delta \AM_{ij}
+	\\
+	\Rot{}{}^i \Delta \Rot{}{ij}
 	\end{pmatrix}
 \end{equation}
 
+Recovering the delta responsible for the state variation during $\Delta t_{ij}$ is called "betweenStates" and comes directly from the delta definition:
+
+\begin{equation}
+\Delta_{ij} =
+\begin{pmatrix}
+	\Rot{}{}^{i,T} (\COM^j - \COM^i - \COMd{}{}^i \Delta t_{ij})
+	\\
+	\Rot{}{}^{i,T} (\COMd^{j} - \COMd^{i} - \bfg \Delta t_{ij})
+	\\
+	\Rot{}{}^{i,T} (\AM_c^{j} - \AM_c^{i})
+	\\
+\Rot{}{}^{i,T} \Rot{}{}^{j}
+\end{pmatrix}
+\end{equation}
+
+
+One could then define the exponential of the Lie groups and use it to define the logarithm and therefore use an error function $e = \Delta_{meas} \ominus \Delta =  Log_{FT}(\Delta^{-1} \Delta_{meas})$. However, the way we derived the noise vectors and there corresponding error functions where with separated blocks. The definition of the error function (the "diff") has therefore to be define as the composite group difference which simply writes as:
+
+\begin{equation}
+	e_{\diamondminus} = \Delta_1 \diamondminus \Delta_2 =
+	\begin{pmatrix}
+	\Delta \COM_2 - \Delta \COM_1
+	\\
+	\Delta \COMd_2 - \Delta \COMd_1
+	\\
+	\Delta \AM_2 - \Delta \AM_1
+	\\
+	log_{SO3}(\Rot{}{1}^T \Rot{}{2})
+	\end{pmatrix}
+\end{equation}
+
+
+
+
+
+
+
 \paragraph{Jacobians of pipeline functions}
+Unless otherwise specified, $0_N$ denotes an N by N matrix with all elements being zeros and $0$ is a zero matrix which dimensions are implicit.
 Let's derive the jacobians for the operations we just described:
 
 \begin{equation}
-    J^{b_k}_{z_k} = \Ident_{(2L+6)\times (2L+6)}
+    J^{b_k}_{z_k} = J^{b_k}_{n_z} = \Ident_{(2L+6)\times (2L+6)}
     ~~~~~
     J^{b_k}_{\bias_k} =
     \begin{pmatrix}
-    0_{2L\times 2L} & 0_{2L\times 3} & 0_{2L\times 3}
+    0_{2L\times 3} & 0_{2L\times 3}
     \\
-    0_{2L\times 3} & -\Ident & 0
+    -\Ident & 0_3
     \\
-    0_{2L\times 3} & 0 & -\Ident
+    0_3 & -\Ident
+	\\
+	0_{2L\times 3} & 0_{2L\times 3}
     \end{pmatrix}
 \end{equation}
+
+The $J^{b_k}_{\bias_k}$ matrix being largely flat, the computations should be easily optimized.
 
 \begin{equation}
 J^{\delta ^k}_{b_k} =
@@ -960,7 +1056,7 @@ J^{\delta ^k}_{b_k} =
     \\
     \Rot{B}{L_1}^k \delta t/m & \Rot{B}{L_2}^k \delta t/m & 0 & 0 & 0 & 0  
     \\
-    \Rot{B}{L_1}^k\left[(\posim{B}{BL_1}^k - \posibar_{BC}^k) \right]_{\times} & \Rot{B}{L_2}^k\left[(\posim{B}{BL_2}^k - \posibar_{BC}^k) \right]_{\times} & \Rot{B}{L_1}^k &  \Rot{B}{L_2}^k & \sum_{l} \Rotm{B}{L}^k [\forcem{}{l}^k]_{\times} & 0 
+    \Rot{B}{L_1}^k\left[(\posim{B}{BL_1}^k - \posibar_{BC}^k) \right]_{\times} \delta t & \Rot{B}{L_2}^k\left[(\posim{B}{BL_2}^k - \posibar_{BC}^k) \right]_{\times} \delta t & \Rot{B}{L_1}^k \delta t &  \Rot{B}{L_2}^k \delta t & \sum_{l} \Rotm{B}{L}^k [\forcem{}{l}^k]_{\times} \delta t & 0 
     \\
     0 & 0 & 0 & 0 & 0 & \delta t J_r (\angvelbar^k \delta t)
 \end{pmatrix}
@@ -1007,9 +1103,49 @@ The bias correction jacobian is also recovered in a recursive manner:
 
 
 
+The error "diff" function jacobian is potentially useful to derive:
 
 
+\begin{equation}
+	J^{e_{\diamondminus}}_{\Delta_1}=
+	\begin{pmatrix}
+	\Ident & 0 & 0 & 0
+	\\
+	0 & \Ident & 0 & 0
+	\end{pmatrix}
+\end{equation}
+TOFINISH
 
+
+\paragraph{WOLF tree organisation}
+
+This paragraph denotes guidelines for the WOLF implementation of the bodydynamics factors (Inertial kinematics, Force Torque immediate, Force Torque Preintegrated). The sketch \ref{fig:WOLFTreeBodydynamics} sums up the different objects involved and their relationships. The problem described here is for the implementation with an inertial kinematics factor, a Force Torque Preintegrated and a factor integrating angular velocity measurements (IMU or leg odometry for instance) and which sensor has a dynamics bias on the angular velocity measurements.
+
+\begin{figure}[ht!]
+	\centering
+	\includegraphics[width=1\linewidth]{img/WOLFTreeBodydynamics.png}
+	\label{fig:WOLFTreeBodydynamics}
+\end{figure}
+
+
+The data contained in the captures and features for each factor are detailed in the table \ref{tab:WolfCaptFeatData}.
+
+\begin{table}[ht!]
+\begin{tabular}{|c|c|c|c|}
+\hline	 	
+& Inertial Kinematics & Force Torque immediate & Force Torque Preint
+\\
+\hline	 
+Capture & $\posim{B}{BC}, \velm{B}{BC}, \posim{B}{BL}, \Rotm{B}{L}, \angvelm{B}{} $ & $\posim{B}{BC}, \posim{B}{BL}, \Rotm{B}{L}, \forcem{}{l}, \torquem{}{l} $ & $[\posim{B}{BC}, \posim{B}{BL}, \Rotm{B}{L}, \forcem{}{l}, \torquem{}{l}, \angvelm{B}{}]_{t \in [t_i,t_m]} $
+\\
+\hline	 
+Feature & $\posim{B}{BC}, \velm{B}{BC}, \posim{B}{BL}, \Rotm{B}{L}, \angvelm{B}{} $ & $\posim{B}{BC}, \posim{B}{BL}, \Rotm{B}{L}, \forcem{}{l}, \torquem{}{l} $ & $\Delta \COMm_{im}, \Delta \COMdm_{im}, \Delta \AMm_{im}, \Delta \Rotm{}{im} $
+\\
+\hline	 
+\end{tabular}
+\caption{Capture and Feature data for bodydynamics factors}
+\label{tab:WolfCaptFeatData}
+\end{table}
 
 
 
