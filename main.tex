@@ -903,7 +903,7 @@ are integrated by the system. We associate to the vector quantity a covariance m
 Current bias estimates at preintegration time $\bar{\bias_p}$ and $\bar{\bias_{\omega}}$ are used to recover unbias estimates of COM relative position and body angular velocity $\posibar_{BC} = \posim{}{BC} - \bar{\bias_p}$ and $\angvelbar_{BC} = \angvelm{}{} - \bar{\bias_{\omega}}$. Let's define $\bias = \left[\bias_p, \bias_{\omega} \right]$ the bias vector. $\bar{\bias}$ will denote the bias estimates at preintegration time. We call the unbiased measurement vector "body magnitudes":
 
 \begin{equation}
-    b_k = f(z_k, \bias_k) = \left[ \left[\forcem{}{l}^k \right]_{l \in [1..N}, \left[\torquem{}{l}^k \right]_{l \in [1..N}, \posibar_{BC}^k, \angvelbar{}{}^k, \left[\posim{B}{BL}^k \right]_{l \in [1..N}, \left[\Rotm{B}{L}^k \right]_{l \in [1..N}\right]
+    \beta_k = f(z_k, \bias_k) = \left[ \left[\forcem{}{l}^k \right]_{l \in [1..N}, \left[\torquem{}{l}^k \right]_{l \in [1..N}, \posibar_{BC}^k, \angvelbar{}{}^k, \left[\posim{B}{BL}^k \right]_{l \in [1..N}, \left[\Rotm{B}{L}^k \right]_{l \in [1..N}\right]
 \end{equation}
 
 Then, we define the delta quantity:
@@ -932,7 +932,7 @@ and the proper delta $\delta_{jk}$ resulting from the integration of measurement
 
 \begin{equation}
     \delta_{jk} =
-    f(b_k, \delta t) =
+    f(\beta_k, \delta t) =
     \begin{pmatrix}
     \frac{1}{2m} \sum_l \Rot{B}{L}^{k} \forcem{}{l}^{k} \delta t^2
     \\
@@ -960,10 +960,10 @@ One important thing to consider is that the delta $\Delta$ define a group under 
 \end{equation}
 with the minus term inside the parenthesis in the $\Delta\COM$ line is due to the fact that time is also reversed ($\delta t$).
 
-The "between" operation is also useful in some instances, the "between" delta being defined as $\Delta_b$ so that $\Delta_2 = \Delta_1 \Delta_b$, that is to stay $\Delta_b = \Delta^{-1}_1 \Delta_2$:
+The "between" operation is also useful in some instances, the "between" delta being defined as $\Delta_{bt}$ so that $\Delta_2 = \Delta_1 \Delta_{bt}$, that is to stay $\Delta_{bt} = \Delta^{-1}_1 \Delta_2$:
 
 \begin{equation}
-\Delta b = 
+\Delta_{bt} = 
 	\begin{pmatrix}
 	\Delta \Rot{}{1}^T(\Delta \COM_2 - \Delta \COM_1) + \Rot{}{1}^T \Delta \COM_1 (\Delta t_1 - \Delta t_2)
 	\\
@@ -1033,9 +1033,9 @@ Unless otherwise specified, $0_N$ denotes an N by N matrix with all elements bei
 Let's derive the jacobians for the operations we just described:
 
 \begin{equation}
-    J^{b_k}_{z_k} = J^{b_k}_{n_z} = \Ident_{(2L+6)\times (2L+6)}
+    J^{\beta_k}_{z_k} = J^{\beta_k}_{n_z} = \Ident_{(2L+6)\times (2L+6)}
     ~~~~~
-    J^{b_k}_{\bias_k} =
+    J^{\beta_k}_{\bias_k} =
     \begin{pmatrix}
     0_{2L\times 3} & 0_{2L\times 3}
     \\
@@ -1050,7 +1050,7 @@ Let's derive the jacobians for the operations we just described:
 The $J^{b_k}_{\bias_k}$ matrix being largely flat, the computations should be easily optimized.
 
 \begin{equation}
-J^{\delta ^k}_{b_k} =
+J^{\delta ^k}_{\beta_k} =
 \begin{pmatrix}
     \Rot{B}{L_1}^k \delta t^2/2m & \Rot{B}{L_2}^k \delta t^2/2m & 0 & 0 & 0 & 0 
     \\
@@ -1108,11 +1108,12 @@ The error "diff" function jacobian is potentially useful to derive:
 
 \begin{equation}
 	J^{e_{\diamondminus}}_{\Delta_1}=
-	\begin{pmatrix}
-	\Ident & 0 & 0 & 0
-	\\
-	0 & \Ident & 0 & 0
-	\end{pmatrix}
+%	\begin{pmatrix}
+%	\Ident & 0 & 0 & 0
+%	\\
+%	0 & \Ident & 0 & 0
+%	\end{pmatrix}
+%   WRONG
 \end{equation}
 TOFINISH
 
